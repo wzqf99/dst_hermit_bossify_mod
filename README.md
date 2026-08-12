@@ -15,8 +15,17 @@
 
 **注意**：如果所有玩家远离战场超过 10 秒，Boss 战会自动结束。
 
+## 开发
+
+打包模组（生成可部署到 mods 目录的文件夹）：
+
+```powershell
+.\package.ps1
+```
+
+输出在 `exports/dst_hermit_bossify_mod/`，将其复制到 DST 的 mods 目录即可。
+
 ## 安装
-- (根据盘符)手动下载放入 D:\steam\steamapps\common\Don't Starve Together\mods 目录
 
 ## 注意事项
 
