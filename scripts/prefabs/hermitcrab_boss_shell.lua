@@ -9,6 +9,9 @@ local assets =
 local prefabs =
 {
     "rock_break_fx",
+    "singingshell_octave3",
+    "singingshell_octave4",
+    "singingshell_octave5",
 }
 
 local LAUNCH_DURATION = 1.25
@@ -39,6 +42,12 @@ local VISUAL_VARIATIONS =
 
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR" }
 local TARGET_ONEOF_TAGS = { "_combat", "HAMMER_workable" }
+local SINGING_SHELL_PREFABS =
+{
+    "singingshell_octave3",
+    "singingshell_octave4",
+    "singingshell_octave5",
+}
 
 local function ApplyVisualVariation(inst)
     local index = inst._visual_variant:value()
@@ -77,10 +86,18 @@ local function BreakShell(inst)
     end
 
     inst._breaking = true
+    local x, _, z = inst.Transform:GetWorldPosition()
+    local drop_position = Vector3(x, 0, z)
     local fx = SpawnPrefab("rock_break_fx")
     if fx ~= nil then
-        local x, _, z = inst.Transform:GetWorldPosition()
-        fx.Transform:SetPosition(x, 0, z)
+        fx.Transform:SetPosition(drop_position:Get())
+    end
+
+    for _ = 1, math.random(1, 3) do
+        inst.components.lootdropper:SpawnLootPrefab(
+            SINGING_SHELL_PREFABS[math.random(#SINGING_SHELL_PREFABS)],
+            drop_position
+        )
     end
     inst:Remove()
 end
@@ -280,6 +297,8 @@ local function fn()
 
     inst.entity:SetCanSleep(false)
     inst.persists = false
+
+    inst:AddComponent("lootdropper")
 
     inst.SetBoss = SetBoss
     inst.OnRemoveEntity = OnRemoveEntity
