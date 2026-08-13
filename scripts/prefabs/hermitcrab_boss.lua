@@ -49,17 +49,20 @@ local WATER_POINT_MIN_SPACING = 5    -- 喷水柱之间的最小间距
 local WATERSPOUT_DAMAGE = TUNING.TRIDENT.SPELL.DAMAGE -- 复用原版三叉戟法术伤害
 local WATERSPOUT_DAMAGE_RADIUS = TUNING.TRIDENT.SPELL.RADIUS
 local SHELL_CONTACT_DAMAGE = DAMAGE  -- 环绕贝壳每次接触的伤害
-local SHELL_CONTACT_COOLDOWN = 1     -- 同一玩家受到任意贝壳伤害后的保护时间
+local SHELL_CONTACT_COOLDOWN = 1     -- 同一目标受到任意贝壳伤害后的保护时间
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
 
-local function CanDamagePlayer(inst, target)
+local function CanDamageTarget(inst, target)
     return target ~= nil
         and target:IsValid()
+        and target ~= inst
         and target.components.combat ~= nil
         and target.components.health ~= nil
         and not target.components.health:IsDead()
+        and not target:HasTag("wall")
+        and not target:HasTag("structure")
         and inst.components.combat:CanTarget(target)
 end
 
@@ -80,7 +83,7 @@ local function DoWaterspoutDamage(inst, point, waterspout, hit_targets)
         local dz = target_z - z
         if not hit_targets[target]
             and dx * dx + dz * dz <= radius * radius
-            and CanDamagePlayer(inst, target) then
+            and CanDamageTarget(inst, target) then
             if target.components.combat:GetAttacked(
                 inst,
                 WATERSPOUT_DAMAGE,
@@ -92,18 +95,18 @@ local function DoWaterspoutDamage(inst, point, waterspout, hit_targets)
     end
 end
 
--- 六枚贝壳共用冷却，防止同一帧重叠命中造成多倍伤害。
+-- 六枚贝壳共用伤害冷却；冷却期间的新接触仍是有效碰撞。
 local function TryShellContactHit(inst, shell, target)
     if inst._encounter_resolved
         or inst._surrendering
-        or not CanDamagePlayer(inst, target) then
+        or not CanDamageTarget(inst, target) then
         return false
     end
 
     local now = GetTime()
     inst._shell_hit_cooldowns = inst._shell_hit_cooldowns or {}
     if (inst._shell_hit_cooldowns[target] or 0) > now then
-        return false
+        return true
     end
 
     if target.components.combat:GetAttacked(inst, SHELL_CONTACT_DAMAGE, shell) then
@@ -114,10 +117,9 @@ local function TryShellContactHit(inst, shell, target)
             strengthmult = 0.45,
             forcelanded = true,
         })
-        return true
     end
 
-    return false
+    return true
 end
 
 local function IsFarEnoughFromWaterPoints(points, x, z)

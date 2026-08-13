@@ -6,6 +6,11 @@ local assets =
     Asset("ANIM", "anim/singingshell_cluster.zip"),
 }
 
+local prefabs =
+{
+    "rock_break_fx",
+}
+
 local LAUNCH_DURATION = 1.25
 local LAUNCH_HEIGHT = 7
 local ORBIT_RADIUS = 4.5
@@ -16,6 +21,7 @@ local UPDATE_PERIOD = FRAMES
 local MAX_FOLLOW_DISTANCE = 8
 local CONTACT_RADIUS = 0.75 -- 与原版 shell_cluster 的碰撞半径一致
 local CONTACT_CHECK_PERIOD = 0.1
+local MAX_CONTACTS = 3
 local BASE_SCALE = 0.6
 local BASE_SHADOW_WIDTH = 1.15
 local BASE_SHADOW_HEIGHT = 0.5
@@ -31,8 +37,8 @@ local VISUAL_VARIATIONS =
     { scale = 0.60, radius =  0.06, height = -0.12, bob = 1.15, phase = 5.8, wobble = 0.045, wobble_speed = 1.05, radial_speed = 1.10, spin =  5, follow = 8.5 },
 }
 
-local TARGET_MUST_TAGS = { "player" }
-local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
+local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR" }
+local TARGET_ONEOF_TAGS = { "_combat", "HAMMER_workable" }
 
 local function ApplyVisualVariation(inst)
     local index = inst._visual_variant:value()
@@ -40,6 +46,8 @@ local function ApplyVisualVariation(inst)
     local shadow_scale = variation.scale / BASE_SCALE
 
     inst._visual_data = variation
+    inst._contact_radius = CONTACT_RADIUS * shadow_scale
+    inst:SetPhysicsRadiusOverride(inst._contact_radius)
     inst.Transform:SetScale(variation.scale, variation.scale, variation.scale)
     inst.DynamicShadow:SetSize(
         BASE_SHADOW_WIDTH * shadow_scale,
@@ -63,33 +71,89 @@ local function OnRemoveEntity(inst)
     end
 end
 
-local function CheckContactDamage(inst, x, z, now)
+local function BreakShell(inst)
+    if inst._breaking then
+        return
+    end
+
+    inst._breaking = true
+    local fx = SpawnPrefab("rock_break_fx")
+    if fx ~= nil then
+        local x, _, z = inst.Transform:GetWorldPosition()
+        fx.Transform:SetPosition(x, 0, z)
+    end
+    inst:Remove()
+end
+
+local function RecordContact(inst)
+    inst._contact_count = inst._contact_count + 1
+    if inst._contact_count >= MAX_CONTACTS then
+        BreakShell(inst)
+        return true
+    end
+
+    return false
+end
+
+local function IsDestructibleStructure(target)
+    local workable = target.components.workable
+    return workable ~= nil
+        and workable:CanBeWorked()
+        and workable:GetWorkAction() == ACTIONS.HAMMER
+        and (target:HasTag("wall") or target:HasTag("structure"))
+end
+
+local function HandleNewContact(inst, target)
+    local boss = inst._boss
+    if target == boss then
+        return false
+    end
+
+    -- 墙也有战斗组件，因此必须先按建筑处理。
+    if IsDestructibleStructure(target) then
+        target.components.workable:Destroy(boss)
+    elseif boss.TryShellContactHit == nil
+        or not boss:TryShellContactHit(inst, target) then
+        return false
+    end
+
+    return RecordContact(inst)
+end
+
+local function CheckContacts(inst, x, z, now)
     if now < inst._next_contact_check then
         return
     end
     inst._next_contact_check = now + CONTACT_CHECK_PERIOD
 
-    local boss = inst._boss
-    if boss.TryShellContactHit == nil then
-        return
-    end
+    local contact_radius = inst._contact_radius or CONTACT_RADIUS
+    local current_contacts = {}
 
     for _, target in ipairs(TheSim:FindEntities(
         x,
         0,
         z,
-        CONTACT_RADIUS + 1,
-        TARGET_MUST_TAGS,
-        TARGET_CANT_TAGS
+        contact_radius + 3,
+        nil,
+        TARGET_CANT_TAGS,
+        TARGET_ONEOF_TAGS
     )) do
-        local radius = CONTACT_RADIUS + target:GetPhysicsRadius(0)
+        local radius = contact_radius + target:GetPhysicsRadius(0)
         local target_x, _, target_z = target.Transform:GetWorldPosition()
         local dx = target_x - x
         local dz = target_z - z
         if dx * dx + dz * dz <= radius * radius then
-            boss:TryShellContactHit(inst, target)
+            current_contacts[target] = true
+            if not inst._contacts[target]
+                and HandleNewContact(inst, target) then
+                return true
+            end
         end
     end
+
+    -- 目标离开判定范围后，下一次进入才会算作新的碰撞。
+    inst._contacts = current_contacts
+    return false
 end
 
 local function UpdatePosition(inst)
@@ -143,7 +207,9 @@ local function UpdatePosition(inst)
         end
 
         inst.Transform:SetPosition(inst._follow_x, target_y, inst._follow_z)
-        CheckContactDamage(inst, inst._follow_x, inst._follow_z, now)
+        if CheckContacts(inst, inst._follow_x, inst._follow_z, now) then
+            return
+        end
     end
 
     inst._last_update_time = now
@@ -161,6 +227,8 @@ local function SetBoss(inst, boss, index, count, start_angle)
     inst._base_angle = start_angle + (index - 1) * TWOPI / count
     inst._start_time = GetTime()
     inst._next_contact_check = inst._start_time
+    inst._contact_count = 0
+    inst._contacts = {}
     inst._start_x, inst._start_y, inst._start_z = inst.Transform:GetWorldPosition()
 
     local variation_offset = math.floor(start_angle / TWOPI * #VISUAL_VARIATIONS)
@@ -219,4 +287,4 @@ local function fn()
     return inst
 end
 
-return Prefab("hermitcrab_boss_shell", fn, assets)
+return Prefab("hermitcrab_boss_shell", fn, assets, prefabs)
