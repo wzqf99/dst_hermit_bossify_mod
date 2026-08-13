@@ -323,6 +323,7 @@ local function RestoreHouse(inst, release_hermit)
 
         CancelTask(house, "_hermitboss_hit_fx_task")
         house.AnimState:SetAddColour(0, 0, 0, 0)
+        house.AnimState:SetScale(1, 1, 1)
         house:RemoveTag("epic")
         house:RemoveTag("hostile")
         house:AddTag("noplayertarget")
@@ -377,11 +378,19 @@ local function OnHouseAttacked(house)
         return
     end
 
+    -- 受击反馈：白光闪烁 + "上下压缩"（横向微放大、纵向压扁），同步回弹。
     house.AnimState:SetAddColour(0.35, 0.35, 0.35, 0)
-    house._hermitboss_hit_fx_task = house:DoTaskInTime(0.12, function()
-        house._hermitboss_hit_fx_task = nil
+    house.AnimState:SetScale(1.06, 0.84, 1.06)
+    house._hermitboss_hit_fx_task = house:DoTaskInTime(0.07, function()
         if house:IsValid() then
-            house.AnimState:SetAddColour(0, 0, 0, 0)
+            house.AnimState:SetScale(1.03, 0.94, 1.03)
+            house._hermitboss_hit_fx_task = house:DoTaskInTime(0.07, function()
+                house._hermitboss_hit_fx_task = nil
+                house.AnimState:SetAddColour(0, 0, 0, 0)
+                house.AnimState:SetScale(1, 1, 1)
+            end)
+        else
+            house._hermitboss_hit_fx_task = nil
         end
     end)
 end
