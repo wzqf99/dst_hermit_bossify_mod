@@ -5,7 +5,6 @@ local HouseDefense =
     ACTIVE_STATE = "HOUSE_DEFENSE",
     PREFABS =
     {
-        "alterguardian_laser",
         "wagboss_missile",
     },
 }
@@ -253,7 +252,7 @@ LaunchMissiles = function(inst)
 
         if count > 0 then
             -- 发射反冲：房子横向收窄 + 纵向拉高，表示这轮飞弹是从房子射出的。
-            SquashHouseFx(house, 0.93, 1.05, 0.2, false)
+            SquashHouseFx(house, 0.88, 1.12, 0.2, false)
         end
 
         inst._final_target_cursor = (target_cursor + count - 1) % #targets + 1
@@ -262,98 +261,165 @@ LaunchMissiles = function(inst)
     ScheduleMissileVolley(inst)
 end
 
-local SpawnLaserSweep
+-- ---------------------------------------------------------------------------
+-- 瓶子投掷：从房屋向岛上玩家抛出抛物线漂流瓶。
+-- 瓶子锁定"投掷瞬间的玩家位置 + 小抖动"，落地爆炸造成范围伤害，
+-- 玩家看到瓶子飞来后走位即可躲开。
+-- ---------------------------------------------------------------------------
+local ScheduleBottleVolley
 
-local function ScheduleLaserSweep(inst)
-    CancelTask(inst, "_final_laser_task")
-    if IsActive(inst) then
-        local delay = GetRandomMinMax(
-            tuning.LASER_INTERVAL_MIN,
-            tuning.LASER_INTERVAL_MAX
-        )
-        inst._final_laser_task = inst:DoTaskInTime(delay, function()
-            inst._final_laser_task = nil
-            SpawnLaserSweep(inst)
-        end)
-    end
-end
-
-local function SpawnLaserNode(inst, house, x, z, targets, skip_toss)
-    if not IsActive(inst) or not house:IsValid() then
+local function ExplodeBottle(bottle)
+    if bottle == nil or not bottle:IsValid() then
         return
     end
 
-    local laser = SpawnPrefab("alterguardian_laser")
-    if laser ~= nil then
-        laser.caster = house
-        laser:OverrideDamage(tuning.LASER_DAMAGE, 1)
-        laser.Transform:SetPosition(x, 0, z)
-        laser:Trigger(
-            0,
-            targets,
-            skip_toss,
-            false,
-            nil,
-            nil,
-            tuning.LASER_HIT_SCALE
-        )
+    local x, y, z = bottle.Transform:GetWorldPosition()
+
+    -- 亮茄炸弹爆炸效果
+    local fx = SpawnPrefab("bomb_lunarplant_explode_fx")
+    if fx ~= nil then
+        fx.Transform:SetPosition(x, y, z)
     end
+
+    local hits = TheSim:FindEntities(x, y, z, tuning.BOTTLE_DAMAGE_RADIUS, { "player" })
+    for _, player in ipairs(hits) do
+        if player ~= nil
+            and player:IsValid()
+            and not player:HasTag("playerghost")
+            and not player:IsInLimbo()
+            and player.components.health ~= nil
+            and not player.components.health:IsDead() then
+            player.components.health:DoDelta(
+                -tuning.BOTTLE_DAMAGE,
+                nil,
+                nil,
+                nil,
+                nil,
+                nil,
+                nil
+            )
+        end
+    end
+
+    bottle:Remove()
 end
 
-SpawnLaserSweep = function(inst)
+local function SpawnThrownBottle(inst, house, aim)
+    local bottle = SpawnPrefab("messagebottle_throwable")
+    if bottle == nil then
+        return
+    end
+
+    local house_pos = house:GetPosition()
+    local sx = house_pos.x
+    local sy = house_pos.y + tuning.BOTTLE_LAUNCH_HEIGHT
+    local sz = house_pos.z
+
+    bottle.Transform:SetPosition(sx, sy, sz)
+    bottle:AddTag("NOCLICK")
+    bottle:AddTag("hermitboss_bottle")
+    if bottle.components.inventoryitem ~= nil then
+        bottle.components.inventoryitem.canbepickedup = false
+    end
+    -- 注意：绝对不要在 bottle 上存实体引用（如 house），
+    -- 否则任何路径触发 JSON 编码时会导致 encode_compliant 递归爆栈。
+
+    -- 使用原版 complexprojectile 组件发射：
+    -- 自带抛物线轨迹、飞行旋转动画（spin_loop），落地必然触发 OnHit，
+    -- 不会再出现手写 SetPosition 与物理组件冲突导致"飞到了却不爆炸"。
+    local projectile = bottle.components.complexprojectile
+    if projectile ~= nil then
+        projectile:SetOnHit(function(proj, attacker, target)
+            ExplodeBottle(proj)
+        end)
+        projectile:SetHorizontalSpeedForDistance(
+            math.sqrt((aim.x - sx) * (aim.x - sx) + (aim.z - sz) * (aim.z - sz)),
+            tuning.BOTTLE_SPEED
+        )
+        projectile:Launch(Vector3(aim.x, 0, aim.z), nil)
+        -- 关闭碰撞：直飞目标落点，不被树/建筑等障碍物挡下
+        if bottle.Physics ~= nil then
+            bottle.Physics:SetCollides(false)
+        end
+    end
+
+    inst._final_bottle_guids = inst._final_bottle_guids or {}
+    local guid = bottle.GUID
+    table.insert(inst._final_bottle_guids, guid)
+    bottle:ListenForEvent("onremove", function()
+        if inst._final_bottle_guids ~= nil then
+            for i, g in ipairs(inst._final_bottle_guids) do
+                if g == guid then
+                    table.remove(inst._final_bottle_guids, i)
+                    break
+                end
+            end
+        end
+    end, bottle)
+end
+
+local function CollectBottleTargets(inst, count)
+    local targets = CollectIslandPlayers(inst)
+    local aims = {}
+    for index = 1, math.min(count, #targets) do
+        local target = targets[math.random(#targets)]
+        local pos = target:GetPosition()
+        local angle = math.random() * TWOPI
+        local jitter = math.random() * tuning.BOTTLE_AIM_JITTER
+        aims[index] =
+        {
+            x = pos.x + math.cos(angle) * jitter,
+            z = pos.z - math.sin(angle) * jitter,
+        }
+    end
+    return aims
+end
+
+local function ThrowBottleVolley(inst)
     local house = inst._final_house
     if not IsActive(inst) or house == nil or not house:IsValid() then
         return
     end
 
-    local center = inst._island_center or house:GetPosition()
-    local start_angle = math.random() * TWOPI
-    local points_per_beam = math.max(
-        1,
-        math.floor(tuning.LASER_POINTS / tuning.LASER_BEAM_COUNT)
-    )
-    local shared_targets = {}
-    local shared_skip_toss = {}
-
-    inst._final_laser_delays = inst._final_laser_delays or {}
-    for beam = 1, tuning.LASER_BEAM_COUNT do
-        local angle = start_angle
-            + (beam - 1) * TWOPI / tuning.LASER_BEAM_COUNT
-            + (math.random() - 0.5) * 0.3
-        for step = 1, points_per_beam do
-            local percent = points_per_beam > 1
-                and (step - 1) / (points_per_beam - 1)
-                or 0
-            local radius = tuning.LASER_MIN_RADIUS
-                + percent * (tuning.LASER_MAX_RADIUS - tuning.LASER_MIN_RADIUS)
-            local x = center.x + radius * math.cos(angle)
-            local z = center.z - radius * math.sin(angle)
-            local delay = (step - 1) * tuning.LASER_POINT_INTERVAL
-                + (beam - 1) * FRAMES
-            local task
-            task = inst:DoTaskInTime(delay, function()
-                inst._final_laser_delays[task] = nil
-                SpawnLaserNode(
-                    inst,
-                    house,
-                    x,
-                    z,
-                    shared_targets,
-                    shared_skip_toss
-                )
+    local aims = CollectBottleTargets(inst, tuning.BOTTLE_MAX_COUNT)
+    if #aims > 0 then
+        for index, aim in ipairs(aims) do
+            inst:DoTaskInTime((index - 1) * tuning.BOTTLE_THROW_STAGGER, function()
+                if IsActive(inst) and house:IsValid() then
+                    SpawnThrownBottle(inst, house, aim)
+                end
             end)
-            inst._final_laser_delays[task] = true
         end
+        -- 投掷反冲：房子横向收窄 + 纵向拉高，表示瓶子是从房子扔出的。
+        SquashHouseFx(house, 0.88, 1.12, 0.2, false)
     end
 
-    ScheduleLaserSweep(inst)
+    ScheduleBottleVolley(inst)
 end
 
-local function CancelLaserDelays(inst)
-    for task in pairs(inst._final_laser_delays or {}) do
-        task:Cancel()
+ScheduleBottleVolley = function(inst)
+    CancelTask(inst, "_final_bottle_task")
+    if IsActive(inst) then
+        local delay = GetRandomMinMax(
+            tuning.BOTTLE_INTERVAL_MIN,
+            tuning.BOTTLE_INTERVAL_MAX
+        )
+        inst._final_bottle_task = inst:DoTaskInTime(delay, function()
+            inst._final_bottle_task = nil
+            ThrowBottleVolley(inst)
+        end)
     end
-    inst._final_laser_delays = nil
+end
+
+local function RemoveAllBottles(inst)
+    local guids = inst._final_bottle_guids or {}
+    inst._final_bottle_guids = nil
+    for _, guid in ipairs(guids) do
+        local bottle = Ents[guid]
+        if bottle ~= nil and bottle:IsValid() then
+            bottle:Remove()
+        end
+    end
 end
 
 local function RestoreHouse(inst, release_hermit)
@@ -411,44 +477,12 @@ local function RestoreHouse(inst, release_hermit)
 end
 
 function HouseDefense.Cleanup(inst, release_hermit)
-    CancelTask(inst, "_final_laser_task")
+    CancelTask(inst, "_final_bottle_task")
     CancelTask(inst, "_final_missile_task")
     CancelTask(inst, "_final_missile_watch_task")
-    CancelLaserDelays(inst)
+    RemoveAllBottles(inst)
     RemoveAllMissiles(inst)
     RestoreHouse(inst, release_hermit)
-end
-
--- 受击/发射共用的"压缩回弹"反馈：瞬间变形 → 中间值 → 恢复。
--- squash_x / squash_y 为峰值缩放（z 跟随 x），回弹时线性插值到 1，
--- show_white 为 true 时叠加白光闪烁。
-local function SquashHouseFx(house, squash_x, squash_y, duration, show_white)
-    if house == nil or not house:IsValid() then
-        return
-    end
-
-    CancelTask(house, "_hermitboss_hit_fx_task")
-    if show_white then
-        house.AnimState:SetAddColour(0.35, 0.35, 0.35, 0)
-    end
-
-    local mid_x = 1 + (squash_x - 1) * 0.5
-    local mid_y = 1 + (squash_y - 1) * 0.5
-    local half = duration * 0.5
-
-    house.AnimState:SetScale(squash_x, squash_y, squash_x)
-    house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
-        if house:IsValid() then
-            house.AnimState:SetScale(mid_x, mid_y, mid_x)
-            house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
-                house._hermitboss_hit_fx_task = nil
-                house.AnimState:SetAddColour(0, 0, 0, 0)
-                house.AnimState:SetScale(1, 1, 1)
-            end)
-        else
-            house._hermitboss_hit_fx_task = nil
-        end
-    end)
 end
 
 local function OnHouseDefeated(house)
@@ -558,7 +592,7 @@ function HouseDefense.Activate(inst)
     house.components.health:SetMinHealth(1)
     house.components.health:SetPercent(1)
     house.components.health:SetInvincible(false)
-    house.components.combat:SetDefaultDamage(tuning.LASER_DAMAGE)
+    house.components.combat:SetDefaultDamage(tuning.HOUSE_COMBAT_DAMAGE)
     house.components.combat.playerdamagepercent = 1
 
     inst._final_house = house
@@ -573,7 +607,9 @@ function HouseDefense.Activate(inst)
     inst.components.health:SetInvincible(true)
     inst.components.combat:SetTarget(nil)
 
-    SpawnLaserSweep(inst)
+    inst._final_bottle_guids = {}
+
+    ScheduleBottleVolley(inst)
     LaunchMissiles(inst)
     inst._final_missile_watch_task = inst:DoPeriodicTask(
         tuning.PLAYER_SCAN_PERIOD,
@@ -612,7 +648,7 @@ function HouseDefense.ConfigureHouse(inst)
     if inst.components.combat == nil then
         inst:AddComponent("combat")
     end
-    inst.components.combat:SetDefaultDamage(tuning.LASER_DAMAGE)
+    inst.components.combat:SetDefaultDamage(tuning.HOUSE_COMBAT_DAMAGE)
     inst.components.combat:SetRange(0)
     inst.components.combat:SetShouldAggroFn(function(_, target)
         return target:HasTag("player")

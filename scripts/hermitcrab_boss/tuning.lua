@@ -47,15 +47,18 @@ return
         ISLAND_RADIUS = 35,
         PLAYER_SCAN_PERIOD = 1,
 
-        LASER_DAMAGE = 55,
-        LASER_INTERVAL_MIN = 6,
-        LASER_INTERVAL_MAX = 8,
-        LASER_MIN_RADIUS = 5,
-        LASER_MAX_RADIUS = 31,
-        LASER_POINTS = 18,
-        LASER_BEAM_COUNT = 3,
-        LASER_POINT_INTERVAL = 2 * FRAMES,
-        LASER_HIT_SCALE = 1.35,
+        -- 房屋近战反击/命中伤害（原激光伤害，保留给房屋 combat 使用）
+        HOUSE_COMBAT_DAMAGE = 55,
+
+        BOTTLE_DAMAGE = 55,
+        BOTTLE_INTERVAL_MIN = 4,
+        BOTTLE_INTERVAL_MAX = 6,
+        BOTTLE_MAX_COUNT = 4,
+        BOTTLE_THROW_STAGGER = 0.45,
+        BOTTLE_SPEED = 12,
+        BOTTLE_LAUNCH_HEIGHT = 2.5,
+        BOTTLE_AIM_JITTER = 0.8,
+        BOTTLE_DAMAGE_RADIUS = 2.5,
 
         MISSILE_INTERVAL_MIN = 8,
         MISSILE_INTERVAL_MAX = 11,
