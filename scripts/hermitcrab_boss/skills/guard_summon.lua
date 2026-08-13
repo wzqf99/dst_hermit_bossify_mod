@@ -6,6 +6,7 @@ local GuardSummon =
     PREFABS =
     {
         "crabking_mob",
+        "hermitcrab_fx_small",
     },
 }
 
@@ -67,6 +68,12 @@ local function SpawnGuards(inst)
         or nil
 
     for _, point in ipairs(FindSpawnPoints(inst)) do
+        -- 水遁特效：蟹卫从水遁中钻出（复用原版寄居蟹搬家水遁特效）
+        local fx = SpawnPrefab("hermitcrab_fx_small")
+        if fx ~= nil then
+            fx.Transform:SetPosition(point:Get())
+        end
+
         local guard = SpawnPrefab("crabking_mob")
         if guard ~= nil then
             guard.Transform:SetPosition(point:Get())
