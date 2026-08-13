@@ -45,6 +45,7 @@ local SHELL_COUNT = 6                -- 喷水柱和环绕贝壳数量
 local ISLAND_WATER_MIN_RADIUS = 22   -- 从奶奶岛中心寻找水面的最小半径
 local ISLAND_WATER_MAX_RADIUS = 40   -- 从奶奶岛中心寻找水面的最大半径
 local ISLAND_WATER_FALLBACK_RADIUS = 55 -- 不规则/搬迁岛屿的扩大搜索半径
+local ISLAND_SALVAGE_RADIUS = 45     -- 与原版“清理水中垃圾”任务的检测范围一致
 local WATER_POINT_MIN_SPACING = 5    -- 喷水柱之间的最小间距
 local WATERSPOUT_DAMAGE = TUNING.TRIDENT.SPELL.DAMAGE -- 复用原版三叉戟法术伤害
 local WATERSPOUT_DAMAGE_RADIUS = TUNING.TRIDENT.SPELL.RADIUS
@@ -53,6 +54,7 @@ local SHELL_CONTACT_COOLDOWN = 1     -- 同一目标受到任意贝壳伤害后�
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
+local SUNKEN_SHELL_MUST_TAGS = { "underwater_salvageable" }
 
 local function CanDamageTarget(inst, target)
     return target ~= nil
@@ -145,14 +147,99 @@ local function TryAddWaterPoint(points, x, z)
     return false
 end
 
--- 在奶奶岛外围的六个扇区分别取点，避免随机结果全挤在同一侧。
-local function FindIslandWaterPoints(inst)
+local function GetSunkenShellCluster(salvage)
+    if salvage == nil
+        or not salvage:IsValid()
+        or salvage.components.winchtarget == nil then
+        return nil
+    end
+
+    local shell_cluster = salvage.components.winchtarget:GetSunkenObject()
+    return shell_cluster ~= nil
+        and shell_cluster:IsValid()
+        and shell_cluster.prefab == "shell_cluster"
+        and shell_cluster
+        or nil
+end
+
+-- 优先使用靠近 Boss 的真实水下贝壳堆，让喷水柱和起飞过程处于玩家视野附近。
+local function FindSunkenShellClusters(inst)
     local center = inst._island_center or inst:GetPosition()
-    local points = {}
+    local boss_x, _, boss_z = inst.Transform:GetWorldPosition()
+    local sources = {}
+
+    for _, salvage in ipairs(TheSim:FindEntities(
+        center.x,
+        0,
+        center.z,
+        ISLAND_SALVAGE_RADIUS,
+        SUNKEN_SHELL_MUST_TAGS
+    )) do
+        local shell_cluster = GetSunkenShellCluster(salvage)
+        if shell_cluster ~= nil then
+            local x, _, z = salvage.Transform:GetWorldPosition()
+            local dx = x - boss_x
+            local dz = z - boss_z
+            table.insert(sources, {
+                salvage = salvage,
+                shell_cluster = shell_cluster,
+                point = Vector3(x, 0, z),
+                distance_sq = dx * dx + dz * dz,
+            })
+        end
+    end
+
+    table.sort(sources, function(a, b)
+        if a.distance_sq == b.distance_sq then
+            return a.salvage.GUID < b.salvage.GUID
+        end
+        return a.distance_sq < b.distance_sq
+    end)
+
+    while #sources > SHELL_COUNT do
+        table.remove(sources)
+    end
+
+    return sources
+end
+
+
+local function ConsumeSunkenShellCluster(inst, source)
+    local salvage = source.salvage
+    local shell_cluster = GetSunkenShellCluster(salvage)
+    if shell_cluster == nil or shell_cluster ~= source.shell_cluster then
+        return false
+    end
+
+    local inventory = salvage.components.inventory
+    if inventory == nil
+        or inventory:RemoveItem(shell_cluster, true) ~= shell_cluster then
+        return false
+    end
+
+    if shell_cluster:IsValid() then
+        shell_cluster:Remove()
+    end
+    if salvage:IsValid() then
+        salvage:Remove()
+    end
+
+    inst._salvaged_shell_cluster_count =
+        (inst._salvaged_shell_cluster_count or 0) + 1
+    return true
+end
+
+-- 用旧随机逻辑补足没有真实贝壳堆的位置。
+local function FillIslandWaterPoints(inst, points)
+    local center = inst._island_center or inst:GetPosition()
     local sector = TWOPI / SHELL_COUNT
     local start_angle = math.random() * TWOPI
 
     for index = 1, SHELL_COUNT do
+        if #points >= SHELL_COUNT then
+            break
+        end
+
         local sector_angle = start_angle + (index - 1) * sector
         for _ = 1, 30 do
             local angle = sector_angle + (math.random() - 0.5) * sector * 0.8
@@ -210,7 +297,14 @@ local function SpawnShellRing(inst)
     inst._shell_phase_released = true
     inst._orbit_shells = inst._orbit_shells or {}
 
-    local points = FindIslandWaterPoints(inst)
+    local points = {}
+    for _, source in ipairs(FindSunkenShellClusters(inst)) do
+        if ConsumeSunkenShellCluster(inst, source) then
+            table.insert(points, source.point)
+        end
+    end
+    FillIslandWaterPoints(inst, points)
+
     local orbit_start_angle = math.random() * TWOPI
     local waterspout_hit_targets = {}
     for index, point in ipairs(points) do
@@ -223,7 +317,7 @@ local function SpawnShellRing(inst)
         local shell = SpawnPrefab("hermitcrab_boss_shell")
         if shell ~= nil then
             shell.Transform:SetPosition(point:Get())
-            shell:SetBoss(inst, index, SHELL_COUNT, orbit_start_angle)
+            shell:SetBoss(inst, index, #points, orbit_start_angle)
             table.insert(inst._orbit_shells, shell)
         end
     end
@@ -361,7 +455,7 @@ local function FinishEncounter(inst, victory, already_removing)
 
     inst._encounter_resolved = true
 
-    -- 环绕物只属于本场战斗，不掉落，也不影响原版清理水中垃圾任务。
+    -- 清理本场战斗仍存活的环绕物。
     RemoveOrbitShells(inst)
 
     -- 停止无玩家超时检测
@@ -399,6 +493,19 @@ local function FinishEncounter(inst, victory, already_removing)
             -- 将寄居蟹从 limbo 恢复回场景
             if hermit:IsInLimbo() then
                 hermit:ReturnToScene()
+            end
+
+            -- 原版没有逐个垃圾的任务计数；通过同一个打捞事件重新扫描岛屿水域。
+            if (inst._salvaged_shell_cluster_count or 0) > 0 then
+                inst._salvaged_shell_cluster_count = 0
+                TheWorld:DoTaskInTime(0, function()
+                    if hermit:IsValid() then
+                        TheWorld:PushEvent("CHEVO_heavyobject_winched", {
+                            target = hermit,
+                            doer = nil,
+                        })
+                    end
+                end)
             end
         end
     end
