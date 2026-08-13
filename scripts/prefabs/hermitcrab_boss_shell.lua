@@ -13,11 +13,39 @@ local ORBIT_HEIGHT = 0.8
 local ORBIT_BOB_HEIGHT = 0.18
 local ORBIT_ANGULAR_SPEED = 0.55
 local UPDATE_PERIOD = FRAMES
+local MAX_FOLLOW_DISTANCE = 8
 local CONTACT_RADIUS = 0.75 -- 与原版 shell_cluster 的碰撞半径一致
 local CONTACT_CHECK_PERIOD = 0.1
+local BASE_SCALE = 0.6
+local BASE_SHADOW_WIDTH = 1.15
+local BASE_SHADOW_HEIGHT = 0.5
+
+-- 六枚贝壳使用不同但有界的视觉参数。轨道角速度保持一致，避免长时间战斗后聚成一团。
+local VISUAL_VARIATIONS =
+{
+    { scale = 0.55, radius = -0.30, height = -0.08, bob = 0.85, phase = 0.2, wobble = 0.035, wobble_speed = 1.10, radial_speed = 0.80, spin = -8, follow = 9.0 },
+    { scale = 0.58, radius =  0.18, height =  0.10, bob = 1.10, phase = 1.3, wobble = 0.025, wobble_speed = 0.85, radial_speed = 1.05, spin =  6, follow = 8.2 },
+    { scale = 0.62, radius = -0.08, height =  0.02, bob = 0.95, phase = 2.5, wobble = 0.040, wobble_speed = 1.25, radial_speed = 0.90, spin = -5, follow = 9.8 },
+    { scale = 0.57, radius =  0.34, height = -0.03, bob = 1.20, phase = 3.6, wobble = 0.030, wobble_speed = 0.95, radial_speed = 1.15, spin =  9, follow = 8.7 },
+    { scale = 0.64, radius = -0.20, height =  0.12, bob = 0.90, phase = 4.7, wobble = 0.020, wobble_speed = 1.35, radial_speed = 0.85, spin = -7, follow = 9.4 },
+    { scale = 0.60, radius =  0.06, height = -0.12, bob = 1.15, phase = 5.8, wobble = 0.045, wobble_speed = 1.05, radial_speed = 1.10, spin =  5, follow = 8.5 },
+}
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
+
+local function ApplyVisualVariation(inst)
+    local index = inst._visual_variant:value()
+    local variation = VISUAL_VARIATIONS[index] or VISUAL_VARIATIONS[1]
+    local shadow_scale = variation.scale / BASE_SCALE
+
+    inst._visual_data = variation
+    inst.Transform:SetScale(variation.scale, variation.scale, variation.scale)
+    inst.DynamicShadow:SetSize(
+        BASE_SHADOW_WIDTH * shadow_scale,
+        BASE_SHADOW_HEIGHT * shadow_scale
+    )
+end
 
 local function RemoveOwnerListener(inst)
     if inst._boss ~= nil and inst._on_boss_removed ~= nil then
@@ -74,12 +102,19 @@ local function UpdatePosition(inst)
     local now = GetTime()
     local elapsed = now - inst._start_time
     local orbit_elapsed = math.max(0, elapsed - LAUNCH_DURATION)
-    local angle = inst._base_angle + orbit_elapsed * ORBIT_ANGULAR_SPEED
+    local variation = inst._visual_data or VISUAL_VARIATIONS[1]
+    local angle = inst._base_angle
+        + orbit_elapsed * ORBIT_ANGULAR_SPEED
+        + variation.wobble * math.sin(orbit_elapsed * variation.wobble_speed + variation.phase)
     local boss_x, boss_y, boss_z = boss.Transform:GetWorldPosition()
-    local target_x = boss_x + ORBIT_RADIUS * math.cos(angle)
-    local target_z = boss_z - ORBIT_RADIUS * math.sin(angle)
-    local target_y = boss_y + ORBIT_HEIGHT
-        + ORBIT_BOB_HEIGHT * math.sin(orbit_elapsed * 3 + inst._base_angle)
+    local orbit_radius = ORBIT_RADIUS
+        + variation.radius
+        + 0.1 * math.sin(orbit_elapsed * variation.radial_speed + variation.phase)
+    local target_x = boss_x + orbit_radius * math.cos(angle)
+    local target_z = boss_z - orbit_radius * math.sin(angle)
+    local target_y = boss_y + ORBIT_HEIGHT + variation.height
+        + ORBIT_BOB_HEIGHT * variation.bob
+            * math.sin(orbit_elapsed * 3 + inst._base_angle + variation.phase)
 
     if elapsed < LAUNCH_DURATION then
         local progress = math.max(0, elapsed / LAUNCH_DURATION)
@@ -91,11 +126,30 @@ local function UpdatePosition(inst)
             inst._start_z + (target_z - inst._start_z) * eased
         )
     else
-        inst.Transform:SetPosition(target_x, target_y, target_z)
-        CheckContactDamage(inst, target_x, target_z, now)
+        local current_x, _, current_z = inst.Transform:GetWorldPosition()
+        inst._follow_x = inst._follow_x or current_x
+        inst._follow_z = inst._follow_z or current_z
+
+        local follow_dx = target_x - inst._follow_x
+        local follow_dz = target_z - inst._follow_z
+        if follow_dx * follow_dx + follow_dz * follow_dz > MAX_FOLLOW_DISTANCE * MAX_FOLLOW_DISTANCE then
+            inst._follow_x = target_x
+            inst._follow_z = target_z
+        else
+            local dt = math.min(now - (inst._last_update_time or now - UPDATE_PERIOD), 0.25)
+            local follow_alpha = 1 - math.exp(-variation.follow * dt)
+            inst._follow_x = inst._follow_x + follow_dx * follow_alpha
+            inst._follow_z = inst._follow_z + follow_dz * follow_alpha
+        end
+
+        inst.Transform:SetPosition(inst._follow_x, target_y, inst._follow_z)
+        CheckContactDamage(inst, inst._follow_x, inst._follow_z, now)
     end
 
-    inst.Transform:SetRotation(angle * RADIANS + 90)
+    inst._last_update_time = now
+    inst.Transform:SetRotation(
+        angle * RADIANS + 90 + orbit_elapsed * variation.spin
+    )
 end
 
 local function SetBoss(inst, boss, index, count, start_angle)
@@ -108,6 +162,10 @@ local function SetBoss(inst, boss, index, count, start_angle)
     inst._start_time = GetTime()
     inst._next_contact_check = inst._start_time
     inst._start_x, inst._start_y, inst._start_z = inst.Transform:GetWorldPosition()
+
+    local variation_offset = math.floor(start_angle / TWOPI * #VISUAL_VARIATIONS)
+    inst._visual_variant:set((index + variation_offset - 1) % #VISUAL_VARIATIONS + 1)
+    ApplyVisualVariation(inst)
 
     inst._on_boss_removed = function()
         if inst:IsValid() then
@@ -124,13 +182,21 @@ local function fn()
 
     inst.entity:AddTransform()
     inst.entity:AddAnimState()
+    inst.entity:AddDynamicShadow()
     inst.entity:AddNetwork()
 
-    inst.Transform:SetScale(0.6, 0.6, 0.6)
     inst:SetPhysicsRadiusOverride(CONTACT_RADIUS)
     inst.AnimState:SetBank("singingshell_cluster")
     inst.AnimState:SetBuild("singingshell_cluster")
     inst.AnimState:PlayAnimation("idle", true)
+
+    inst._visual_variant = net_tinybyte(
+        inst.GUID,
+        "hermitcrab_boss_shell.visual_variant",
+        "visualvariantdirty"
+    )
+    inst:ListenForEvent("visualvariantdirty", ApplyVisualVariation)
+    ApplyVisualVariation(inst)
 
     inst:AddTag("FX")
     inst:AddTag("NOCLICK")
