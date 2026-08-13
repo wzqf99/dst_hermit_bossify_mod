@@ -44,6 +44,13 @@ local events =
             inst.sg:GoToState("trident_cast")
         end
     end),
+
+    -- 50% 血量阶段：使用星杖动作召唤三只蟹卫。
+    EventHandler("hermitboss_guard_summon", function(inst)
+        if not inst._surrendering and not inst._encounter_resolved then
+            inst.sg:GoToState("staff_cast")
+        end
+    end),
 }
 
 local states =
@@ -144,6 +151,63 @@ local states =
 
         ontimeout = function(inst)
             inst:SpawnShellRing()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
+    },
+
+    -- ============================
+    -- 50% 血量：星杖动作召唤蟹卫
+    -- 复用原版星杖的 staff_pre / staff 施法动画。
+    -- ============================
+    State
+    {
+        name = "staff_cast",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("staff_pre")
+            inst.AnimState:PushAnimation("staff", false)
+
+            -- 动画资源异常时也能自动退出，不会永久卡在施法中。
+            inst.sg:SetTimeout(2.25)
+        end,
+
+        timeline =
+        {
+            TimeEvent(8 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("dontstarve/common/staffteleport")
+            end),
+            TimeEvent(14 * FRAMES, function(inst)
+                inst:SpawnGuards()
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:SpawnGuards()
             inst.sg:GoToState("idle")
         end,
 

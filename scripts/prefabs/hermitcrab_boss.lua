@@ -2,6 +2,7 @@
 local brain = require("brains/hermitcrab_bossbrain")
 local encounter = require("hermitcrab_boss/encounter")
 local shell_ring = require("hermitcrab_boss/skills/shell_ring")
+local guard_summon = require("hermitcrab_boss/skills/guard_summon")
 local tuning = require("hermitcrab_boss/tuning")
 
 local assets =
@@ -33,6 +34,7 @@ end
 
 AddModulePrefabs(encounter)
 AddModulePrefabs(shell_ring)
+AddModulePrefabs(guard_summon)
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
@@ -108,6 +110,8 @@ local function fn()
     inst:AddTag("monster")
     inst:AddTag("epic")
     inst:AddTag("hermitcrab_boss")
+    -- 标记为蟹卫友军，避免召唤出的蟹卫把 Boss 当作目标攻击。
+    inst:AddTag("crabking_ally")
 
     inst.entity:SetPristine()
 
@@ -124,6 +128,7 @@ local function fn()
     -- 生命周期监听先注册，保证致命伤害优先进入投降而不是阶段技能。
     encounter.Attach(inst)
     shell_ring.Attach(inst, encounter.FINISHED_EVENT)
+    guard_summon.Attach(inst, encounter.FINISHED_EVENT)
 
     return inst
 end

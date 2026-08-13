@@ -40,7 +40,7 @@ local VISUAL_VARIATIONS =
     { scale = 0.60, radius =  0.06, height = -0.12, bob = 1.15, phase = 5.8, wobble = 0.045, wobble_speed = 1.05, radial_speed = 1.10, spin =  5, follow = 8.5 },
 }
 
-local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR" }
+local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR", "crabking_ally" }
 local TARGET_ONEOF_TAGS = { "_combat", "HAMMER_workable" }
 local SINGING_SHELL_PREFABS =
 {

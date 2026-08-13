@@ -27,4 +27,13 @@ return
         SALVAGE_RADIUS = 45,
         WATER_POINT_MIN_SPACING = 5,
     },
+
+    GUARD_SUMMON =
+    {
+        PHASE_HEALTH = 0.5,
+        COUNT = 3,
+        SPAWN_MIN_RADIUS = 2,
+        SPAWN_MAX_RADIUS = 5,
+        SPAWN_ATTEMPTS = 30,
+    },
 }
