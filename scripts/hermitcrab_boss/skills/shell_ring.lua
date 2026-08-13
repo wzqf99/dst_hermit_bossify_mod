@@ -248,7 +248,10 @@ local function FillIslandWaterPoints(inst, points)
 end
 
 local function Spawn(inst)
-    if inst._shell_phase_released or inst._encounter_resolved or inst._surrendering then
+    if inst._shell_phase_released
+        or inst._final_phase_triggered
+        or inst._encounter_resolved
+        or inst._surrendering then
         return
     end
 
@@ -282,7 +285,10 @@ local function Spawn(inst)
 end
 
 local function Begin(inst)
-    if inst._shell_phase_triggered or inst._encounter_resolved or inst._surrendering then
+    if inst._shell_phase_triggered
+        or inst._final_phase_triggered
+        or inst._encounter_resolved
+        or inst._surrendering then
         return
     end
 
@@ -293,6 +299,7 @@ end
 
 local function OnHealthDelta(inst, data)
     if not inst._shell_phase_triggered
+        and not inst._final_phase_triggered
         and not inst._surrendering
         and inst.components.health.currenthealth > inst.components.health.minhealth
         and data ~= nil
@@ -340,12 +347,13 @@ local function OnEncounterFinished(inst, data)
     end)
 end
 
-function ShellRing.Attach(inst, encounter_finished_event)
+function ShellRing.Attach(inst, encounter_finished_event, final_phase_started_event)
     inst.SpawnShellRing = Spawn
     inst.TryShellContactHit = TryContactHit
 
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)
+    inst:ListenForEvent(final_phase_started_event, RemoveOrbitShells)
 end
 
 return ShellRing

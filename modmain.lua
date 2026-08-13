@@ -5,11 +5,13 @@
 
 local STRINGS = GLOBAL.STRINGS
 local SpawnPrefab = GLOBAL.SpawnPrefab
+local require = GLOBAL.require
 
 -- 自定义物品和生物 prefab 名称
 local TOKEN_PREFAB = "hermitcrab_boss_token"
 local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
+local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
 
 -- 注册让游戏加载的 prefab 文件（对应 scripts/prefabs/ 下的同名文件）
 PrefabFiles =
@@ -18,6 +20,9 @@ PrefabFiles =
     BOSS_PREFAB,
     BOSS_SHELL_PREFAB,
 }
+
+-- 房屋默认仍不可攻击；最终阶段只激活本场关联的原版房屋。
+FINAL_PHASE.RegisterHousePostInits(AddPrefabPostInit)
 
 -- 物品和生物的名称（鼠标悬停时显示）
 STRINGS.NAMES.HERMITCRAB_BOSS_TOKEN = "帝王蟹的信物"
