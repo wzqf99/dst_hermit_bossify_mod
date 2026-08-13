@@ -3,6 +3,7 @@ local brain = require("brains/hermitcrab_bossbrain")
 local encounter = require("hermitcrab_boss/encounter")
 local shell_ring = require("hermitcrab_boss/skills/shell_ring")
 local guard_summon = require("hermitcrab_boss/skills/guard_summon")
+local house_turret = require("hermitcrab_boss/skills/house_turret")
 local tuning = require("hermitcrab_boss/tuning")
 
 local assets =
@@ -35,6 +36,7 @@ end
 AddModulePrefabs(encounter)
 AddModulePrefabs(shell_ring)
 AddModulePrefabs(guard_summon)
+AddModulePrefabs(house_turret)
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
@@ -129,6 +131,7 @@ local function fn()
     encounter.Attach(inst)
     shell_ring.Attach(inst, encounter.FINISHED_EVENT)
     guard_summon.Attach(inst, encounter.FINISHED_EVENT)
+    house_turret.Attach(inst, encounter.FINISHED_EVENT)
 
     return inst
 end

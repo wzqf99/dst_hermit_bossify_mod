@@ -4,10 +4,14 @@
 --   idle ←→ attack / hit / walk / run
 --   idle → surrender → FinishEncounter(true)
 -- 攻击使用标准持武器动作，75% 血量时使用三叉戟拨弦动作，
+-- 50% 血量时使用星杖施法动作召唤蟹卫，
+-- 30% 血量时走入小屋化身炮塔（turret_walk → turret_enter → turret_active），
 -- 受伤和投降使用 "hit" 动画。
 -- ============================================================================
 
 require("stategraphs/commonstates")
+
+local house_turret_tuning = require("hermitcrab_boss/tuning").HOUSE_TURRET
 
 local events =
 {
@@ -49,6 +53,13 @@ local events =
     EventHandler("hermitboss_guard_summon", function(inst)
         if not inst._surrendering and not inst._encounter_resolved then
             inst.sg:GoToState("staff_cast")
+        end
+    end),
+
+    -- 30% 血量阶段：走入小屋化身炮塔。
+    EventHandler("hermitboss_house_turret", function(inst)
+        if not inst._surrendering and not inst._encounter_resolved then
+            inst.sg:GoToState("turret_walk")
         end
     end),
 }
@@ -208,6 +219,141 @@ local states =
 
         ontimeout = function(inst)
             inst:SpawnGuards()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
+    },
+
+    -- ============================
+    -- 30% 血量：走向小屋
+    -- 距小屋 ≤40 用原版行走动画走过去，更远直接传送到门口；
+    -- 走到门口后由 house_turret 模块推送 turret_enter。
+    -- ============================
+    State
+    {
+        name = "turret_walk",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            local house = inst:FindTurretHouse()
+            inst._turret_house = house
+
+            if house == nil or not house:IsValid() then
+                -- 岛上没有小屋：原地进入炮塔状态兜底
+                inst:EnterHouse()
+                inst.sg:GoToState("turret_active")
+                return
+            end
+
+            local hx, _, hz = house.Transform:GetWorldPosition()
+            local x, _, z = inst.Transform:GetWorldPosition()
+            local walk_range = house_turret_tuning.WALK_RANGE * house_turret_tuning.WALK_RANGE
+
+            if (hx - x) * (hx - x) + (hz - z) * (hz - z) > walk_range then
+                -- 太远：直接传送到小屋门口
+                local pt = inst:GetTurretDoorPoint(house)
+                inst.Physics:SetCollides(false)
+                inst.Physics:Teleport(pt.x, 0, pt.z)
+                inst.Physics:SetCollides(true)
+                inst.sg:GoToState("turret_enter")
+                return
+            end
+
+            -- 较近：原版行走动画走向小屋，到达检测由模块的周期任务完成
+            inst:ForceFacePoint(hx, 0, hz)
+            inst.AnimState:PlayAnimation("walk_loop", true)
+            inst:StartTurretApproach(house)
+            inst.sg:SetTimeout(house_turret_tuning.WALK_TIMEOUT)
+        end,
+
+        ontimeout = function(inst)
+            inst:EnterHouse()
+            inst.sg:GoToState("turret_active")
+        end,
+
+        onexit = function(inst)
+            inst:StopTurretApproach()
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+        end,
+    },
+
+    -- ============================
+    -- 进屋动画：原版寄居蟹 gohome
+    -- give 动画 + 定格第 5 帧，然后隐藏 Boss 进入炮塔状态。
+    -- ============================
+    State
+    {
+        name = "turret_enter",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            local house = inst._turret_house
+            if house ~= nil and house:IsValid() then
+                local hx, _, hz = house.Transform:GetWorldPosition()
+                inst:ForceFacePoint(hx, 0, hz)
+            end
+
+            -- 记录门口位置，出屋时回到这里
+            inst._turret_door = inst:GetPosition()
+
+            -- 原版寄居蟹 gohome：give 动画 + 定格第 5 帧
+            inst.AnimState:PlayAnimation("give")
+            inst.AnimState:SetFrame(5)
+
+            inst.sg.statemem.enter_task = inst:DoTaskInTime(0.5, function()
+                inst:EnterHouse()
+                if inst.sg ~= nil then
+                    inst.sg:GoToState("turret_active")
+                end
+            end)
+            inst.sg:SetTimeout(1)
+        end,
+
+        ontimeout = function(inst)
+            inst:EnterHouse()
+            inst.sg:GoToState("turret_active")
+        end,
+
+        onexit = function(inst)
+            if inst.sg.statemem.enter_task ~= nil then
+                inst.sg.statemem.enter_task:Cancel()
+                inst.sg.statemem.enter_task = nil
+            end
+        end,
+    },
+
+    -- ============================
+    -- 炮塔阶段：Boss 隐藏在小屋中，小屋向玩家倾泻激光与导弹
+    -- ============================
+    State
+    {
+        name = "turret_active",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.sg:SetTimeout(house_turret_tuning.DURATION)
+        end,
+
+        ontimeout = function(inst)
+            inst:ExitHouse()
             inst.sg:GoToState("idle")
         end,
 
