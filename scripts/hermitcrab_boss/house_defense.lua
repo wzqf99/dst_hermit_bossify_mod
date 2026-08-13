@@ -121,6 +121,47 @@ local function RemoveAllMissiles(inst)
     end
 end
 
+-- 受击/发射共用的"压缩回弹"反馈：瞬间变形 → 中间值 → 恢复。
+-- squash_x / squash_y 为峰值缩放（z 跟随 x），回弹时线性插值到 1，
+-- show_white 为 true 时叠加白光闪烁。
+local function SquashHouseFx(house, squash_x, squash_y, duration, show_white)
+    if house == nil or not house:IsValid() then
+        return
+    end
+
+    CancelTask(house, "_hermitboss_hit_fx_task")
+    if show_white then
+        house.AnimState:SetAddColour(0.35, 0.35, 0.35, 0)
+    end
+
+    local mid_x = 1 + (squash_x - 1) * 0.5
+    local mid_y = 1 + (squash_y - 1) * 0.5
+    local half = duration * 0.5
+
+    house.AnimState:SetScale(squash_x, squash_y, squash_x)
+    house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
+        if house:IsValid() then
+            house.AnimState:SetScale(mid_x, mid_y, mid_x)
+            house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
+                house._hermitboss_hit_fx_task = nil
+                house.AnimState:SetAddColour(0, 0, 0, 0)
+                house.AnimState:SetScale(1, 1, 1)
+            end)
+        else
+            house._hermitboss_hit_fx_task = nil
+        end
+    end)
+end
+
+local function OnHouseAttacked(house)
+    if house._hermitboss_controller == nil then
+        return
+    end
+
+    -- 受击反馈：白光闪烁 + 上下压扁（被砸扁），快速回弹。
+    SquashHouseFx(house, 1.06, 0.84, 0.14, true)
+end
+
 local function TryRetargetMissiles(inst)
     if not IsActive(inst) then
         return
@@ -209,6 +250,12 @@ LaunchMissiles = function(inst)
                 direction = direction + direction_step
             end
         end
+
+        if count > 0 then
+            -- 发射反冲：房子横向收窄 + 纵向拉高，表示这轮飞弹是从房子射出的。
+            SquashHouseFx(house, 0.93, 1.05, 0.2, false)
+        end
+
         inst._final_target_cursor = (target_cursor + count - 1) % #targets + 1
     end
 
@@ -372,19 +419,28 @@ function HouseDefense.Cleanup(inst, release_hermit)
     RestoreHouse(inst, release_hermit)
 end
 
-local function OnHouseAttacked(house)
-    if house._hermitboss_controller == nil
-        or house._hermitboss_hit_fx_task ~= nil then
+-- 受击/发射共用的"压缩回弹"反馈：瞬间变形 → 中间值 → 恢复。
+-- squash_x / squash_y 为峰值缩放（z 跟随 x），回弹时线性插值到 1，
+-- show_white 为 true 时叠加白光闪烁。
+local function SquashHouseFx(house, squash_x, squash_y, duration, show_white)
+    if house == nil or not house:IsValid() then
         return
     end
 
-    -- 受击反馈：白光闪烁 + "上下压缩"（横向微放大、纵向压扁），同步回弹。
-    house.AnimState:SetAddColour(0.35, 0.35, 0.35, 0)
-    house.AnimState:SetScale(1.06, 0.84, 1.06)
-    house._hermitboss_hit_fx_task = house:DoTaskInTime(0.07, function()
+    CancelTask(house, "_hermitboss_hit_fx_task")
+    if show_white then
+        house.AnimState:SetAddColour(0.35, 0.35, 0.35, 0)
+    end
+
+    local mid_x = 1 + (squash_x - 1) * 0.5
+    local mid_y = 1 + (squash_y - 1) * 0.5
+    local half = duration * 0.5
+
+    house.AnimState:SetScale(squash_x, squash_y, squash_x)
+    house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
         if house:IsValid() then
-            house.AnimState:SetScale(1.03, 0.94, 1.03)
-            house._hermitboss_hit_fx_task = house:DoTaskInTime(0.07, function()
+            house.AnimState:SetScale(mid_x, mid_y, mid_x)
+            house._hermitboss_hit_fx_task = house:DoTaskInTime(half, function()
                 house._hermitboss_hit_fx_task = nil
                 house.AnimState:SetAddColour(0, 0, 0, 0)
                 house.AnimState:SetScale(1, 1, 1)
