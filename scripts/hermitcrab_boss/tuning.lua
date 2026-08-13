@@ -48,6 +48,10 @@ return
         HOUSE_HEALTHBAR_HEIGHT = 5,
         HOUSE_HEALTHBAR_WIDTH = 100,
 
+        -- 蟹骑士：最终阶段在房子附近召唤一只
+        HOUSE_KNIGHT_SPAWN_RADIUS = 4,
+        HOUSE_KNIGHT_SPAWN_JITTER = 2,
+
         ISLAND_RADIUS = 35,
         PLAYER_SCAN_PERIOD = 1,
 

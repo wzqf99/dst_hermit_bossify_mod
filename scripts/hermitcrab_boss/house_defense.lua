@@ -6,6 +6,8 @@ local HouseDefense =
     PREFABS =
     {
         "wagboss_missile",
+        "crabking_mob_knight",
+        "hermitcrab_fx_small",
     },
 }
 
@@ -86,6 +88,56 @@ local function FindHouse(inst)
         end
     end
     return nearest
+end
+
+-- 在房子附近寻找蟹骑士的可生成点（陆地可通过点）。
+local function FindKnightSpawnPoint(house)
+    local hx, _, hz = house:GetPosition():Get()
+    for _ = 1, 30 do
+        local angle = math.random() * TWOPI
+        local radius = tuning.HOUSE_KNIGHT_SPAWN_RADIUS
+            + math.random() * tuning.HOUSE_KNIGHT_SPAWN_JITTER
+        local px = hx + radius * math.cos(angle)
+        local pz = hz - radius * math.sin(angle)
+        if TheWorld.Map:IsPassableAtPoint(px, 0, pz) then
+            return px, pz
+        end
+    end
+    return hx, hz
+end
+
+local function SpawnHouseKnight(inst, house)
+    local knight = SpawnPrefab("crabking_mob_knight")
+    if knight == nil then
+        return
+    end
+
+    local px, pz = FindKnightSpawnPoint(house)
+
+    -- 水遁特效：蟹骑士从水遁中钻出
+    local fx = SpawnPrefab("hermitcrab_fx_small")
+    if fx ~= nil then
+        fx.Transform:SetPosition(px, 0, pz)
+    end
+
+    knight.Transform:SetPosition(px, 0, pz)
+
+    -- 立即追击岛上的一名玩家
+    local targets = CollectIslandPlayers(inst)
+    if #targets > 0
+        and knight.components.combat ~= nil then
+        knight.components.combat:SetTarget(targets[math.random(#targets)])
+    end
+
+    inst._final_house_knight = knight
+end
+
+local function RemoveHouseKnight(inst)
+    local knight = inst._final_house_knight
+    inst._final_house_knight = nil
+    if knight ~= nil and knight:IsValid() then
+        knight:Remove()
+    end
 end
 
 local function RemoveMissile(inst, missile, onremove)
@@ -485,6 +537,7 @@ function HouseDefense.Cleanup(inst, release_hermit)
     CancelTask(inst, "_final_missile_watch_task")
     RemoveAllBottles(inst)
     RemoveAllMissiles(inst)
+    RemoveHouseKnight(inst)
     RestoreHouse(inst, release_hermit)
 end
 
@@ -619,6 +672,7 @@ function HouseDefense.Activate(inst)
 
     ScheduleBottleVolley(inst)
     LaunchMissiles(inst)
+    SpawnHouseKnight(inst, house)
     inst._final_missile_watch_task = inst:DoPeriodicTask(
         tuning.PLAYER_SCAN_PERIOD,
         TryRetargetMissiles,
