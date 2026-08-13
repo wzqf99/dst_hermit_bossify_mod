@@ -451,6 +451,9 @@ local function RestoreHouse(inst, release_hermit)
             house.components.health:SetInvincible(true)
             house.components.health:SetPercent(1)
         end
+        if house.components.healthbar ~= nil then
+            house.components.healthbar:Enable(false)
+        end
         if house.components.combat ~= nil then
             house.components.combat:SetTarget(nil)
             house.components.combat.playerdamagepercent = nil
@@ -595,6 +598,11 @@ function HouseDefense.Activate(inst)
     house.components.combat:SetDefaultDamage(tuning.HOUSE_COMBAT_DAMAGE)
     house.components.combat.playerdamagepercent = 1
 
+    -- 激活房子头顶血条
+    if house.components.healthbar ~= nil then
+        house.components.healthbar:Enable(true)
+    end
+
     inst._final_house = house
     inst._final_state = HouseDefense.ACTIVE_STATE
 
@@ -654,6 +662,18 @@ function HouseDefense.ConfigureHouse(inst)
         return target:HasTag("player")
     end)
     inst.components.combat:SetOnHit(OnHouseAttacked)
+
+    -- 原版 healthbar 组件：仅依赖 health 组件，事件驱动 + net_float 自动同步。
+    -- 房子挂上后即可在头顶显示血量条，无需自行编写 widget/Image 绘制逻辑。
+    if inst.components.healthbar == nil then
+        inst:AddComponent("healthbar")
+    end
+    if inst.components.healthbar ~= nil then
+        -- 休眠期不显示，战斗激活后再 Enable
+        inst.components.healthbar:Enable(false)
+        inst.components.healthbar.bar_world_offset = Vector3(0, tuning.HOUSE_HEALTHBAR_HEIGHT, 0)
+        inst.components.healthbar.bar_width = tuning.HOUSE_HEALTHBAR_WIDTH
+    end
 
     inst:AddTag("noplayertarget")
     inst:AddTag("noattack")

@@ -44,6 +44,10 @@ return
         -- 房屋沿用 Boss 剩余生命，避免阶段切换时凭空恢复生命。
         HOUSE_MIN_HEALTH = 100,
 
+        -- 房子头顶血条（原版 healthbar 组件）的显示参数
+        HOUSE_HEALTHBAR_HEIGHT = 5,
+        HOUSE_HEALTHBAR_WIDTH = 100,
+
         ISLAND_RADIUS = 35,
         PLAYER_SCAN_PERIOD = 1,
 
