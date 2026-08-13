@@ -13,6 +13,11 @@ local ORBIT_HEIGHT = 0.8
 local ORBIT_BOB_HEIGHT = 0.18
 local ORBIT_ANGULAR_SPEED = 0.55
 local UPDATE_PERIOD = FRAMES
+local CONTACT_RADIUS = 0.75 -- 与原版 shell_cluster 的碰撞半径一致
+local CONTACT_CHECK_PERIOD = 0.1
+
+local TARGET_MUST_TAGS = { "player" }
+local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
 
 local function RemoveOwnerListener(inst)
     if inst._boss ~= nil and inst._on_boss_removed ~= nil then
@@ -30,6 +35,35 @@ local function OnRemoveEntity(inst)
     end
 end
 
+local function CheckContactDamage(inst, x, z, now)
+    if now < inst._next_contact_check then
+        return
+    end
+    inst._next_contact_check = now + CONTACT_CHECK_PERIOD
+
+    local boss = inst._boss
+    if boss.TryShellContactHit == nil then
+        return
+    end
+
+    for _, target in ipairs(TheSim:FindEntities(
+        x,
+        0,
+        z,
+        CONTACT_RADIUS + 1,
+        TARGET_MUST_TAGS,
+        TARGET_CANT_TAGS
+    )) do
+        local radius = CONTACT_RADIUS + target:GetPhysicsRadius(0)
+        local target_x, _, target_z = target.Transform:GetWorldPosition()
+        local dx = target_x - x
+        local dz = target_z - z
+        if dx * dx + dz * dz <= radius * radius then
+            boss:TryShellContactHit(inst, target)
+        end
+    end
+end
+
 local function UpdatePosition(inst)
     local boss = inst._boss
     if boss == nil or not boss:IsValid() or boss._encounter_resolved then
@@ -37,7 +71,8 @@ local function UpdatePosition(inst)
         return
     end
 
-    local elapsed = GetTime() - inst._start_time
+    local now = GetTime()
+    local elapsed = now - inst._start_time
     local orbit_elapsed = math.max(0, elapsed - LAUNCH_DURATION)
     local angle = inst._base_angle + orbit_elapsed * ORBIT_ANGULAR_SPEED
     local boss_x, boss_y, boss_z = boss.Transform:GetWorldPosition()
@@ -57,6 +92,7 @@ local function UpdatePosition(inst)
         )
     else
         inst.Transform:SetPosition(target_x, target_y, target_z)
+        CheckContactDamage(inst, target_x, target_z, now)
     end
 
     inst.Transform:SetRotation(angle * RADIANS + 90)
@@ -70,6 +106,7 @@ local function SetBoss(inst, boss, index, count, start_angle)
     inst._boss = boss
     inst._base_angle = start_angle + (index - 1) * TWOPI / count
     inst._start_time = GetTime()
+    inst._next_contact_check = inst._start_time
     inst._start_x, inst._start_y, inst._start_z = inst.Transform:GetWorldPosition()
 
     inst._on_boss_removed = function()
@@ -90,6 +127,7 @@ local function fn()
     inst.entity:AddNetwork()
 
     inst.Transform:SetScale(0.6, 0.6, 0.6)
+    inst:SetPhysicsRadiusOverride(CONTACT_RADIUS)
     inst.AnimState:SetBank("singingshell_cluster")
     inst.AnimState:SetBuild("singingshell_cluster")
     inst.AnimState:PlayAnimation("idle", true)

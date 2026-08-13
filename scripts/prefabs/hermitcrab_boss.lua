@@ -46,9 +46,79 @@ local ISLAND_WATER_MIN_RADIUS = 22   -- 从奶奶岛中心寻找水面的最小�
 local ISLAND_WATER_MAX_RADIUS = 40   -- 从奶奶岛中心寻找水面的最大半径
 local ISLAND_WATER_FALLBACK_RADIUS = 55 -- 不规则/搬迁岛屿的扩大搜索半径
 local WATER_POINT_MIN_SPACING = 5    -- 喷水柱之间的最小间距
+local WATERSPOUT_DAMAGE = TUNING.TRIDENT.SPELL.DAMAGE -- 复用原版三叉戟法术伤害
+local WATERSPOUT_DAMAGE_RADIUS = TUNING.TRIDENT.SPELL.RADIUS
+local SHELL_CONTACT_DAMAGE = DAMAGE  -- 环绕贝壳每次接触的伤害
+local SHELL_CONTACT_COOLDOWN = 1     -- 同一玩家受到任意贝壳伤害后的保护时间
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
+
+local function CanDamagePlayer(inst, target)
+    return target ~= nil
+        and target:IsValid()
+        and target.components.combat ~= nil
+        and target.components.health ~= nil
+        and not target.components.health:IsDead()
+        and inst.components.combat:CanTarget(target)
+end
+
+-- crab_king_waterspout 只是视觉特效，原版三叉戟的实际伤害需要由施法方处理。
+local function DoWaterspoutDamage(inst, point, waterspout, hit_targets)
+    local x, y, z = point:Get()
+    for _, target in ipairs(TheSim:FindEntities(
+        x,
+        y,
+        z,
+        WATERSPOUT_DAMAGE_RADIUS + 1,
+        TARGET_MUST_TAGS,
+        TARGET_CANT_TAGS
+    )) do
+        local radius = WATERSPOUT_DAMAGE_RADIUS + target:GetPhysicsRadius(0)
+        local target_x, _, target_z = target.Transform:GetWorldPosition()
+        local dx = target_x - x
+        local dz = target_z - z
+        if not hit_targets[target]
+            and dx * dx + dz * dz <= radius * radius
+            and CanDamagePlayer(inst, target) then
+            if target.components.combat:GetAttacked(
+                inst,
+                WATERSPOUT_DAMAGE,
+                waterspout
+            ) then
+                hit_targets[target] = true
+            end
+        end
+    end
+end
+
+-- 六枚贝壳共用冷却，防止同一帧重叠命中造成多倍伤害。
+local function TryShellContactHit(inst, shell, target)
+    if inst._encounter_resolved
+        or inst._surrendering
+        or not CanDamagePlayer(inst, target) then
+        return false
+    end
+
+    local now = GetTime()
+    inst._shell_hit_cooldowns = inst._shell_hit_cooldowns or {}
+    if (inst._shell_hit_cooldowns[target] or 0) > now then
+        return false
+    end
+
+    if target.components.combat:GetAttacked(inst, SHELL_CONTACT_DAMAGE, shell) then
+        inst._shell_hit_cooldowns[target] = now + SHELL_CONTACT_COOLDOWN
+        target:PushEvent("knockback", {
+            knocker = shell,
+            radius = shell:GetPhysicsRadius(0.75) + target:GetPhysicsRadius(0),
+            strengthmult = 0.45,
+            forcelanded = true,
+        })
+        return true
+    end
+
+    return false
+end
 
 local function IsFarEnoughFromWaterPoints(points, x, z)
     local min_distance_sq = WATER_POINT_MIN_SPACING * WATER_POINT_MIN_SPACING
@@ -140,11 +210,13 @@ local function SpawnShellRing(inst)
 
     local points = FindIslandWaterPoints(inst)
     local orbit_start_angle = math.random() * TWOPI
+    local waterspout_hit_targets = {}
     for index, point in ipairs(points) do
         local waterspout = SpawnPrefab("crab_king_waterspout")
         if waterspout ~= nil then
             waterspout.Transform:SetPosition(point:Get())
         end
+        DoWaterspoutDamage(inst, point, waterspout, waterspout_hit_targets)
 
         local shell = SpawnPrefab("hermitcrab_boss_shell")
         if shell ~= nil then
@@ -484,6 +556,7 @@ local function fn()
     -- 暴露接口供外部调用
     inst.SetEncounterHermit = SetEncounterHermit
     inst.SpawnShellRing = SpawnShellRing
+    inst.TryShellContactHit = TryShellContactHit
     inst.FinishEncounter = FinishEncounter
     inst.OnRemoveEntity = OnRemoveEntity
 
