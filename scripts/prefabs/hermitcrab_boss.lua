@@ -11,10 +11,12 @@ local assets =
     Asset("ANIM", "anim/player_basic.zip"),
     Asset("ANIM", "anim/player_actions.zip"),
     Asset("ANIM", "anim/player_actions_item.zip"),
+    Asset("ANIM", "anim/player_actions_uniqueitem.zip"),
     Asset("ANIM", "anim/player_hermitcrab_idle.zip"),
     Asset("ANIM", "anim/player_hermitcrab_walk.zip"),
     Asset("ANIM", "anim/player_hermitcrab_look.zip"),
     Asset("ANIM", "anim/hermitcrab_build.zip"),
+    Asset("ANIM", "anim/swap_trident.zip"),
     Asset("SOUND", "sound/sfx.fsb"),
     Asset("SOUND", "sound/wilson.fsb"),
 }
@@ -23,6 +25,8 @@ local assets =
 local prefabs =
 {
     "hermit_pearl",
+    "crab_king_waterspout",
+    "hermitcrab_boss_shell",
 }
 
 -- ============================================================================
@@ -36,9 +40,143 @@ local KEEP_TARGET_DISTANCE = 30      -- 丢失目标距离
 local ENCOUNTER_DISTANCE = 35        -- 判定"附近有玩家"的距离
 local EMPTY_ENCOUNTER_TIMEOUT = 10   -- 无玩家超时时间（秒），超时后战斗自动结束
 local WATCH_PERIOD = 2               -- 检测周期（秒）
+local SHELL_PHASE_HEALTH = 0.75      -- 贝壳环绕阶段触发血量
+local SHELL_COUNT = 6                -- 喷水柱和环绕贝壳数量
+local ISLAND_WATER_MIN_RADIUS = 22   -- 从奶奶岛中心寻找水面的最小半径
+local ISLAND_WATER_MAX_RADIUS = 40   -- 从奶奶岛中心寻找水面的最大半径
+local ISLAND_WATER_FALLBACK_RADIUS = 55 -- 不规则/搬迁岛屿的扩大搜索半径
+local WATER_POINT_MIN_SPACING = 5    -- 喷水柱之间的最小间距
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
+
+local function IsFarEnoughFromWaterPoints(points, x, z)
+    local min_distance_sq = WATER_POINT_MIN_SPACING * WATER_POINT_MIN_SPACING
+    for _, point in ipairs(points) do
+        local dx = point.x - x
+        local dz = point.z - z
+        if dx * dx + dz * dz < min_distance_sq then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function TryAddWaterPoint(points, x, z)
+    if TheWorld.Map:IsOceanAtPoint(x, 0, z, false)
+        and IsFarEnoughFromWaterPoints(points, x, z) then
+        table.insert(points, Vector3(x, 0, z))
+        return true
+    end
+
+    return false
+end
+
+-- 在奶奶岛外围的六个扇区分别取点，避免随机结果全挤在同一侧。
+local function FindIslandWaterPoints(inst)
+    local center = inst._island_center or inst:GetPosition()
+    local points = {}
+    local sector = TWOPI / SHELL_COUNT
+    local start_angle = math.random() * TWOPI
+
+    for index = 1, SHELL_COUNT do
+        local sector_angle = start_angle + (index - 1) * sector
+        for _ = 1, 30 do
+            local angle = sector_angle + (math.random() - 0.5) * sector * 0.8
+            local radius = ISLAND_WATER_MIN_RADIUS
+                + math.random() * (ISLAND_WATER_MAX_RADIUS - ISLAND_WATER_MIN_RADIUS)
+            local x = center.x + radius * math.cos(angle)
+            local z = center.z - radius * math.sin(angle)
+            if TryAddWaterPoint(points, x, z) then
+                break
+            end
+        end
+    end
+
+    -- 岛屿形状不规则时，再进行不分扇区的兜底搜索。
+    for _ = 1, 300 do
+        if #points >= SHELL_COUNT then
+            break
+        end
+
+        local angle = math.random() * TWOPI
+        local radius = ISLAND_WATER_MIN_RADIUS
+            + math.random() * (ISLAND_WATER_MAX_RADIUS - ISLAND_WATER_MIN_RADIUS)
+        TryAddWaterPoint(
+            points,
+            center.x + radius * math.cos(angle),
+            center.z - radius * math.sin(angle)
+        )
+    end
+
+    -- 随机采样仍不足时，按同一个随机起始角做环形扫描，保证标准岛屿凑齐六点。
+    local radius = ISLAND_WATER_MIN_RADIUS
+    while #points < SHELL_COUNT and radius <= ISLAND_WATER_FALLBACK_RADIUS do
+        for step = 0, 71 do
+            local angle = start_angle + step * TWOPI / 72
+            TryAddWaterPoint(
+                points,
+                center.x + radius * math.cos(angle),
+                center.z - radius * math.sin(angle)
+            )
+            if #points >= SHELL_COUNT then
+                break
+            end
+        end
+        radius = radius + 1
+    end
+
+    return points
+end
+
+local function SpawnShellRing(inst)
+    if inst._shell_phase_released or inst._encounter_resolved or inst._surrendering then
+        return
+    end
+
+    inst._shell_phase_released = true
+    inst._orbit_shells = inst._orbit_shells or {}
+
+    local points = FindIslandWaterPoints(inst)
+    local orbit_start_angle = math.random() * TWOPI
+    for index, point in ipairs(points) do
+        local waterspout = SpawnPrefab("crab_king_waterspout")
+        if waterspout ~= nil then
+            waterspout.Transform:SetPosition(point:Get())
+        end
+
+        local shell = SpawnPrefab("hermitcrab_boss_shell")
+        if shell ~= nil then
+            shell.Transform:SetPosition(point:Get())
+            shell:SetBoss(inst, index, SHELL_COUNT, orbit_start_angle)
+            table.insert(inst._orbit_shells, shell)
+        end
+    end
+end
+
+local function BeginShellPhase(inst)
+    if inst._shell_phase_triggered or inst._encounter_resolved or inst._surrendering then
+        return
+    end
+
+    inst._shell_phase_triggered = true
+    inst.components.combat:CancelAttack()
+    inst:PushEvent("hermitboss_shell_phase")
+end
+
+local function RemoveOrbitShells(inst)
+    if inst._orbit_shells == nil then
+        return
+    end
+
+    for _, shell in ipairs(inst._orbit_shells) do
+        if shell:IsValid() then
+            shell:Remove()
+        end
+    end
+    inst._orbit_shells = nil
+end
 
 -- ---------------------------------------------------------------------------
 -- 索敌函数：在范围内寻找可攻击的玩家
@@ -113,9 +251,14 @@ end
 -- 血量变化监听：血量降至最低时触发投降
 -- 注意：使用 minhealth=1 实现"打到1血投降"而非击杀
 -- ---------------------------------------------------------------------------
-local function OnHealthDelta(inst)
+local function OnHealthDelta(inst, data)
     if inst.components.health.currenthealth <= inst.components.health.minhealth then
         BeginSurrender(inst)
+    elseif not inst._shell_phase_triggered
+        and data ~= nil
+        and data.oldpercent > SHELL_PHASE_HEALTH
+        and data.newpercent <= SHELL_PHASE_HEALTH then
+        BeginShellPhase(inst)
     end
 end
 
@@ -143,6 +286,9 @@ local function FinishEncounter(inst, victory, already_removing)
     end
 
     inst._encounter_resolved = true
+
+    -- 环绕物只属于本场战斗，不掉落，也不影响原版清理水中垃圾任务。
+    RemoveOrbitShells(inst)
 
     -- 停止无玩家超时检测
     if inst._watch_task ~= nil then
@@ -208,6 +354,13 @@ end
 local function SetEncounterHermit(inst, hermit, challenger)
     inst._encounter_hermit = hermit
 
+    -- 优先使用奶奶岛中心标记，让喷水柱分布在整座岛的外围。
+    local island_marker = hermit.CHEVO_marker
+    if island_marker == nil or not island_marker:IsValid() then
+        island_marker = FindEntity(hermit, 35, nil, { "hermitcrab_marker" })
+    end
+    inst._island_center = island_marker ~= nil and island_marker:GetPosition() or inst:GetPosition()
+
     -- 记录出生位置作为"家"（用于 Leash 行为）
     inst.components.knownlocations:RememberLocation("home", inst:GetPosition())
 
@@ -268,7 +421,10 @@ local function fn()
     inst.AnimState:SetBank("wilson")
     inst.AnimState:SetBuild("hermitcrab_build")
     inst.AnimState:PlayAnimation("idle_loop", true)
-    inst.AnimState:Hide("ARM_carry")
+    inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+    inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+    inst.AnimState:Show("ARM_carry")
+    inst.AnimState:Hide("ARM_normal")
     inst.AnimState:Hide("HAT")
     inst.AnimState:Hide("HAIR_HAT")
     inst.AnimState:Show("HAIR_NOHAT")
@@ -305,7 +461,7 @@ local function fn()
     inst.components.locomotor.walkspeed = 3
     inst.components.locomotor.runspeed = 5
 
-    -- 生命值：最大 1500，最低 1（不会死亡，打到 1 血后投降）
+    -- 生命值：最大 5200，最低 1（不会死亡，打到 1 血后投降）
     inst:AddComponent("health")
     inst.components.health:SetMaxHealth(MAX_HEALTH)
     inst.components.health:SetMinHealth(1)
@@ -327,6 +483,7 @@ local function fn()
 
     -- 暴露接口供外部调用
     inst.SetEncounterHermit = SetEncounterHermit
+    inst.SpawnShellRing = SpawnShellRing
     inst.FinishEncounter = FinishEncounter
     inst.OnRemoveEntity = OnRemoveEntity
 

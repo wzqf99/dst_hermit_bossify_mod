@@ -3,8 +3,8 @@
 -- 状态流程：
 --   idle ←→ attack / hit / walk / run
 --   idle → surrender → FinishEncounter(true)
--- 攻击动画使用 "give"（寄居蟹"给予"动作作为攻击），
--- 受伤和投降使用 "hit" 动画
+-- 攻击使用标准持武器动作，75% 血量时使用三叉戟拨弦动作，
+-- 受伤和投降使用 "hit" 动画。
 -- ============================================================================
 
 require("stategraphs/commonstates")
@@ -37,6 +37,13 @@ local events =
             inst.sg:GoToState("surrender")
         end
     end),
+
+    -- 75% 血量阶段：强制打断当前动作并使用三叉戟召出贝壳堆。
+    EventHandler("hermitboss_shell_phase", function(inst)
+        if not inst._surrendering and not inst._encounter_resolved then
+            inst.sg:GoToState("trident_cast")
+        end
+    end),
 }
 
 local states =
@@ -56,7 +63,7 @@ local states =
     },
 
     -- ============================
-    -- 攻击（使用寄居蟹"给予"动画）
+    -- 攻击（手持三叉戟的标准武器攻击）
     -- ============================
     State
     {
@@ -68,24 +75,83 @@ local states =
             inst.components.combat:StartAttack()
             inst.sg.statemem.target = target
 
-            -- 使用"give"动画模拟攻击，给予→攻击的语义转换
-            inst.AnimState:PlayAnimation("give")
+            inst.AnimState:PlayAnimation("atk_pre")
+            inst.AnimState:PushAnimation("atk", false)
         end,
 
         timeline =
         {
-            -- 动画第 10 帧时造成伤害
-            TimeEvent(10 * FRAMES, function(inst)
+            TimeEvent(8 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("dontstarve/wilson/attack_weapon")
                 inst.components.combat:DoAttack(inst.sg.statemem.target)
             end),
         },
 
         events =
         {
-            EventHandler("animover", function(inst)
-                inst.sg:GoToState("idle")
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
             end),
         },
+    },
+
+    -- ============================
+    -- 75% 血量：三叉戟喷水柱召唤
+    -- 使用原版三叉戟的 strum_pre / strum 动画和触发帧。
+    -- ============================
+    State
+    {
+        name = "trident_cast",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("strum_pre")
+            inst.AnimState:PushAnimation("strum", false)
+
+            -- 动画资源异常时也能自动退出，不会永久卡在阶段转换中。
+            inst.sg:SetTimeout(2.25)
+        end,
+
+        timeline =
+        {
+            TimeEvent(23 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/trident_attack")
+            end),
+            TimeEvent(28 * FRAMES, function(inst)
+                inst:SpawnShellRing()
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:SpawnShellRing()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
     },
 
     -- ============================

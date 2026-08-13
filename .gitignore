@@ -1,6 +1,5 @@
 # Local Don't Starve Together source reference used for AI code reading.
 /dst_origin_script/
-/.dst-smoke/
 
 # Build output
 /exports/
