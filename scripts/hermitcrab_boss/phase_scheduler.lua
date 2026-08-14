@@ -12,6 +12,8 @@
 -- 关键保证：一次掉血只触发"最深"（阈值最低）的未触发阶段。
 -- 高额伤害可能一次跨过多个阈值，若全部触发会导致同帧多点进入状态机、
 -- SG 状态互相覆盖；而最终阶段会清理其余技能实体，因此只进最深阶段即可。
+-- 同阈值的多个阶段视为同一档（例如 50% 拆出的"牢笼 / 螺旋"两个海带技能），
+-- 一并触发；它们共用同一个施法状态，同帧多次进入同一状态不会互相覆盖。
 -- ============================================================================
 local PhaseScheduler = {}
 
@@ -26,15 +28,16 @@ function PhaseScheduler.RegisterPhase(phase)
     end
 end
 
--- 本次掉血跨越的未触发阶段中，阈值最低（最深）的一个。
-local function FindDeepestPhase(inst, data)
+-- 本次掉血跨越的未触发阶段中，阈值最低（最深）的一档。
+-- 返回该档阈值；同阈值的多个阶段视为同一档（例如 50% 的牢笼 / 螺旋）。
+local function FindDeepestThreshold(inst, data)
     local deepest = nil
     for _, phase in ipairs(PhaseScheduler.PHASES) do
         if not inst._phase_triggered[phase.event]
             and data.oldpercent > phase.threshold
             and data.newpercent <= phase.threshold then
-            if deepest == nil or phase.threshold < deepest.threshold then
-                deepest = phase
+            if deepest == nil or phase.threshold < deepest then
+                deepest = phase.threshold
             end
         end
     end
@@ -52,9 +55,17 @@ local function OnHealthDelta(inst, data)
         return
     end
 
-    local phase = FindDeepestPhase(inst, data)
-    if phase ~= nil then
-        phase.trigger(inst)
+    local threshold = FindDeepestThreshold(inst, data)
+    if threshold ~= nil then
+        -- 只触发最深一档；同档（同阈值）的多个阶段一并触发。
+        for _, phase in ipairs(PhaseScheduler.PHASES) do
+            if not inst._phase_triggered[phase.event]
+                and phase.threshold == threshold
+                and data.oldpercent > phase.threshold
+                and data.newpercent <= phase.threshold then
+                phase.trigger(inst)
+            end
+        end
     end
 end
 

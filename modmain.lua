@@ -242,9 +242,12 @@ GLOBAL.c_sc = function()
 
     -- 清除已触发标志（调度器统一维护互斥，允许反复测试）
     PHASE_SCHEDULER.ResetPhase(boss, EVENTS.KELP_SNARE)
+    PHASE_SCHEDULER.ResetPhase(boss, EVENTS.KELP_SPIRAL)
     boss._kelp_snare_released = nil
+    boss._kelp_spiral_released = nil
 
-    -- 触发完整连招流程（先铺蛛网，再施法释放海带骨刺）
+    -- 触发 50% 海带连招（牢笼 + 螺旋，各自为独立技能，共用一次施法）
     boss:TriggerKelpSnare()
-    print("[hermit_bossify] c_sc: 已触发铺蛛网 + 海带骨刺连招")
+    boss:TriggerKelpSpiral()
+    print("[hermit_bossify] c_sc: 已触发 50% 海带连招（牢笼 + 螺旋）")
 end

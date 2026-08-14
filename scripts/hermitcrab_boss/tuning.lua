@@ -15,23 +15,9 @@ return
         WATCH_PERIOD = 2,
     },
 
-    KELP_SNARE =
+    -- 海带骨刺共享参数：50% 的两个海带技能（牢笼 / 螺旋）共用。
+    KELP_SPIKE =
     {
-        -- 50% 血量触发（与蟹卫召唤对调后）
-        PHASE_HEALTH = 0.5,
-
-        -- 骨刺牢笼：围绕每个玩家生成一圈海带刺
-        SNARE_RANGE = 40,
-        SNARE_MAX_RANGE = 45,
-
-        -- 螺旋骨刺：从 Boss 脚下螺旋扩散
-        -- 总覆盖半径 ≈ SPIRAL_START_RADIUS + SPIRAL_COUNT * SPIRAL_RADIUS_STEP ≈ 16.5
-        SPIRAL_COUNT = 40,
-        SPIRAL_SPACING = 0.6,
-        SPIRAL_START_RADIUS = 0.5,
-        SPIRAL_RADIUS_STEP = 0.4,
-        SPIRAL_DELAY_PER_STEP = 0.03,
-
         -- 海带刺持续时间（秒）
         SPIKE_DURATION = 6,
 
@@ -47,8 +33,33 @@ return
         SPIKE_DAMAGE = BASE_DAMAGE,
         SPIKE_CONTACT_RADIUS = 1.6,
         SPIKE_CONTACT_COOLDOWN = 1,
+    },
 
-        -- 铺蛛网：海带骨刺释放前在 Boss 脚下铺一片蛛网减速玩家（不影响 Boss 自己）。
+    -- 海带骨刺技能·牢笼：50% 血量触发（与蟹卫召唤对调后）。
+    -- 围绕每个玩家生成一圈海带刺，形成牢笼。
+    KELP_SNARE =
+    {
+        PHASE_HEALTH = 0.5,
+
+        SNARE_RANGE = 40,
+        SNARE_MAX_RANGE = 45,
+    },
+
+    -- 海带骨刺技能·螺旋：50% 血量触发。
+    -- 从 Boss 脚下以阿基米德螺旋扩散，逐个延迟冒出。
+    KELP_SPIRAL =
+    {
+        PHASE_HEALTH = 0.5,
+
+        -- 螺旋骨刺：从 Boss 脚下螺旋扩散
+        -- 总覆盖半径 ≈ SPIRAL_START_RADIUS + SPIRAL_COUNT * SPIRAL_RADIUS_STEP ≈ 16.5
+        SPIRAL_COUNT = 40,
+        SPIRAL_SPACING = 0.6,
+        SPIRAL_START_RADIUS = 0.5,
+        SPIRAL_RADIUS_STEP = 0.4,
+        SPIRAL_DELAY_PER_STEP = 0.03,
+
+        -- 铺蛛网：螺旋骨刺释放前在 Boss 脚下铺一片蛛网减速玩家（不影响 Boss 自己）。
         WEB_RADIUS = 6,              -- 单片蛛网的减速半径（与原版 BOOK_WEB_GROUND_RADIUS 一致）
         WEB_SPEED_PENALTY = 0.3,     -- 减速后速度比例（越小越慢）
         WEB_DURATION = 10,           -- 蛛网持续时间（秒）

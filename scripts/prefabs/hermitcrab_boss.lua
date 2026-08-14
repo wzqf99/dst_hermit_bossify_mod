@@ -6,6 +6,8 @@ local final_phase = require("hermitcrab_boss/skills/final_phase")
 local fissure = require("hermitcrab_boss/fissure")
 local guard_summon = require("hermitcrab_boss/skills/guard_summon")
 local kelp_snare = require("hermitcrab_boss/skills/kelp_snare")
+local kelp_spike = require("hermitcrab_boss/skills/kelp_spike")
+local kelp_spiral = require("hermitcrab_boss/skills/kelp_spiral")
 local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
 local shell_ring = require("hermitcrab_boss/skills/shell_ring")
 local tuning = require("hermitcrab_boss/tuning")
@@ -39,6 +41,8 @@ end
 
 AddModulePrefabs(encounter)
 AddModulePrefabs(kelp_snare)
+AddModulePrefabs(kelp_spike)
+AddModulePrefabs(kelp_spiral)
 AddModulePrefabs(shell_ring)
 AddModulePrefabs(guard_summon)
 AddModulePrefabs(final_phase)
@@ -62,6 +66,12 @@ phase_scheduler.RegisterPhase(
     threshold = tuning.KELP_SNARE.PHASE_HEALTH,
     event = events.KELP_SNARE,
     trigger = function(inst) inst:TriggerKelpSnare() end,
+})
+phase_scheduler.RegisterPhase(
+{
+    threshold = tuning.KELP_SPIRAL.PHASE_HEALTH,
+    event = events.KELP_SPIRAL,
+    trigger = function(inst) inst:TriggerKelpSpiral() end,
 })
 phase_scheduler.RegisterPhase(
 {
@@ -170,6 +180,7 @@ local function fn()
     encounter.Attach(inst)
     fissure.Attach(inst)
     kelp_snare.Attach(inst)
+    kelp_spiral.Attach(inst)
     shell_ring.Attach(inst)
     guard_summon.Attach(inst)
 

@@ -44,12 +44,19 @@ local events =
         end
     end),
 
-    -- 90% 血量阶段：用竖立的海带模拟骨刺牢笼 + 螺旋骨刺。
+    -- 50% 血量阶段：海带骨刺连招（骨刺牢笼 + 螺旋骨刺，两个独立技能共用一次施法）。
     EventHandler(event_names.KELP_SNARE, function(inst)
         if not inst._surrendering
             and not inst._final_phase_triggered
             and not inst._encounter_resolved then
-            inst.sg:GoToState("kelp_snare")
+            inst.sg:GoToState("kelp_cast")
+        end
+    end),
+    EventHandler(event_names.KELP_SPIRAL, function(inst)
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
+            inst.sg:GoToState("kelp_cast")
         end
     end),
 
@@ -62,7 +69,7 @@ local events =
         end
     end),
 
-    -- 50% 血量阶段：使用星杖动作召唤三只蟹卫。
+    -- 90% 血量阶段：使用星杖动作召唤三只蟹卫（从裂隙处钻出）。
     EventHandler(event_names.GUARD_SUMMON, function(inst)
         if not inst._surrendering
             and not inst._final_phase_triggered
@@ -131,12 +138,13 @@ local states =
     },
 
     -- ============================
-    -- 90% 血量：海带骨刺（骨刺牢笼 + 螺旋骨刺）
-    -- 复用星杖施法动画作为抬手动作，在帧上释放海带刺。
+    -- 50% 血量：海带骨刺连招（牢笼 + 螺旋）
+    -- 两个独立技能（kelp_snare / kelp_spiral）共用一次星杖施法动画，
+    -- 在帧上同时释放；各技能内部按自身触发状态决定是否生成。
     -- ============================
     State
     {
-        name = "kelp_snare",
+        name = "kelp_cast",
         tags = { "busy", "noattack", "playing" },
 
         onenter = function(inst)
@@ -163,6 +171,7 @@ local states =
             end),
             TimeEvent(14 * FRAMES, function(inst)
                 inst:SpawnKelpSnare()
+                inst:SpawnKelpSpiral()
             end),
         },
 
@@ -177,6 +186,7 @@ local states =
 
         ontimeout = function(inst)
             inst:SpawnKelpSnare()
+            inst:SpawnKelpSpiral()
             inst.sg:GoToState("idle")
         end,
 
