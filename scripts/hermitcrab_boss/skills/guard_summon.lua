@@ -1,4 +1,6 @@
 -- 蟹卫召唤技能：血量降至 90% 时，使用星杖动作召唤三只蟹卫（复用原版 crabking_mob）。
+-- 召唤点优先为 90% 时打开的裂隙（蟹卫从三个裂隙处钻出，与最终阶段生成方式一致），
+-- 裂隙不足时回退到 Boss 周围随机点补足。
 local events = require("hermitcrab_boss/events")
 local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
 local util = require("hermitcrab_boss/util")
@@ -55,6 +57,27 @@ local function FindSpawnPoints(inst)
     return points
 end
 
+-- 召唤点：优先使用 90% 时打开的裂隙（通过 inst:GetOpenedFissurePoints 获取，
+-- 不直接依赖 fissure 内部字段；裂隙点已过滤为可通过点），
+-- 数量不足 tuning.COUNT 时，用 Boss 周围随机点补足，保证召唤数量恒定。
+local function CollectSpawnPoints(inst)
+    local points = inst.GetOpenedFissurePoints ~= nil
+        and inst:GetOpenedFissurePoints()
+        or {}
+
+    local needed = tuning.COUNT - #points
+    if needed > 0 then
+        for _, point in ipairs(FindSpawnPoints(inst)) do
+            if #points >= tuning.COUNT then
+                break
+            end
+            table.insert(points, point)
+        end
+    end
+
+    return points
+end
+
 local function SpawnGuards(inst)
     if inst._guard_summon_released
         or inst._final_phase_triggered
@@ -70,7 +93,7 @@ local function SpawnGuards(inst)
         and inst.components.combat.target
         or nil
 
-    for _, point in ipairs(FindSpawnPoints(inst)) do
+    for _, point in ipairs(CollectSpawnPoints(inst)) do
         -- 水遁特效：蟹卫从水遁中钻出（复用原版寄居蟹搬家水遁特效）
         local fx = SpawnPrefab("hermitcrab_fx_small")
         if fx ~= nil then
