@@ -7,6 +7,7 @@ local HouseDefense =
     {
         "wagboss_missile",
         "crabking_mob_knight",
+        "crabking_mob",
         "hermitcrab_fx_small",
     },
 }
@@ -106,37 +107,71 @@ local function FindKnightSpawnPoint(house)
     return hx, hz
 end
 
-local function SpawnHouseKnight(inst, house)
-    local knight = SpawnPrefab("crabking_mob_knight")
-    if knight == nil then
-        return
+-- 从三个裂隙处召唤最终阶段单位：1 蟹骑士 + 2 蟹卫。
+-- 裂隙位置来自 fissure 模块 90% 时打开的 inst._opened_fissures
+--（原版奶奶岛固定 3 个堵住裂缝，打开后即成为三个生成点）。
+-- 裂隙不足时兜底：在房子附近找可通过点补足。
+local function SpawnFissureMinions(inst, house)
+    local points = {}
+    if inst._opened_fissures ~= nil then
+        for _, fissure in ipairs(inst._opened_fissures) do
+            if fissure ~= nil and fissure:IsValid() then
+                local x, _, z = fissure.Transform:GetWorldPosition()
+                if TheWorld.Map:IsPassableAtPoint(x, 0, z) then
+                    table.insert(points, Vector3(x, 0, z))
+                end
+            end
+        end
     end
 
-    local px, pz = FindKnightSpawnPoint(house)
-
-    -- 水遁特效：蟹骑士从水遁中钻出
-    local fx = SpawnPrefab("hermitcrab_fx_small")
-    if fx ~= nil then
-        fx.Transform:SetPosition(px, 0, pz)
+    local total = tuning.FINAL_KNIGHT_COUNT + tuning.FINAL_GUARD_COUNT
+    while #points < total do
+        local px, pz = FindKnightSpawnPoint(house)
+        table.insert(points, Vector3(px, 0, pz))
     end
 
-    knight.Transform:SetPosition(px, 0, pz)
+    -- 召唤顺序：先蟹骑士（第一个裂隙），再蟹卫（其余裂隙）。
+    local summon_list = {}
+    for _ = 1, tuning.FINAL_KNIGHT_COUNT do
+        table.insert(summon_list, "crabking_mob_knight")
+    end
+    for _ = 1, tuning.FINAL_GUARD_COUNT do
+        table.insert(summon_list, "crabking_mob")
+    end
 
-    -- 立即追击岛上的一名玩家
     local targets = CollectIslandPlayers(inst)
-    if #targets > 0
-        and knight.components.combat ~= nil then
-        knight.components.combat:SetTarget(targets[math.random(#targets)])
-    end
+    inst._final_minions = inst._final_minions or {}
 
-    inst._final_house_knight = knight
+    for index, prefab in ipairs(summon_list) do
+        local point = points[index]
+        if point ~= nil then
+            -- 水遁特效：单位从裂隙处的水遁中钻出
+            local fx = SpawnPrefab("hermitcrab_fx_small")
+            if fx ~= nil then
+                fx.Transform:SetPosition(point:Get())
+            end
+
+            local minion = SpawnPrefab(prefab)
+            if minion ~= nil then
+                minion.Transform:SetPosition(point:Get())
+                -- 立即追击岛上的一名玩家
+                if #targets > 0
+                    and minion.components.combat ~= nil then
+                    minion.components.combat:SetTarget(targets[math.random(#targets)])
+                end
+                table.insert(inst._final_minions, minion)
+            end
+        end
+    end
 end
 
-local function RemoveHouseKnight(inst)
-    local knight = inst._final_house_knight
-    inst._final_house_knight = nil
-    if knight ~= nil and knight:IsValid() then
-        knight:Remove()
+local function RemoveFinalMinions(inst)
+    local minions = inst._final_minions or {}
+    inst._final_minions = nil
+    for _, minion in ipairs(minions) do
+        if minion ~= nil and minion:IsValid() then
+            minion:Remove()
+        end
     end
 end
 
@@ -537,7 +572,7 @@ function HouseDefense.Cleanup(inst, release_hermit)
     CancelTask(inst, "_final_missile_watch_task")
     RemoveAllBottles(inst)
     RemoveAllMissiles(inst)
-    RemoveHouseKnight(inst)
+    RemoveFinalMinions(inst)
     RestoreHouse(inst, release_hermit)
 end
 
@@ -672,7 +707,7 @@ function HouseDefense.Activate(inst)
 
     ScheduleBottleVolley(inst)
     LaunchMissiles(inst)
-    SpawnHouseKnight(inst, house)
+    SpawnFissureMinions(inst, house)
     inst._final_missile_watch_task = inst:DoPeriodicTask(
         tuning.PLAYER_SCAN_PERIOD,
         TryRetargetMissiles,

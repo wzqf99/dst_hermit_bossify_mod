@@ -99,7 +99,11 @@ return
         HOUSE_HEALTHBAR_HEIGHT = 5,
         HOUSE_HEALTHBAR_WIDTH = 100,
 
-        -- 蟹骑士：最终阶段在房子附近召唤一只
+        -- 最终阶段：从三个裂隙处召唤 1 蟹骑士 + 2 蟹卫
+        --（裂隙位置 = 90% 时打开的原版堵住裂缝，奶奶岛固定 3 个）。
+        FINAL_KNIGHT_COUNT = 1,    -- 蟹骑士数量（生成在第一个裂隙处）
+        FINAL_GUARD_COUNT = 2,     -- 蟹卫数量（生成在其余裂隙处）
+        -- 裂隙不足时的兜底生成参数（围绕房子找可通过点补足）
         HOUSE_KNIGHT_SPAWN_RADIUS = 4,
         HOUSE_KNIGHT_SPAWN_JITTER = 2,
 
