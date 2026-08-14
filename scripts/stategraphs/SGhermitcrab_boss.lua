@@ -42,6 +42,15 @@ local events =
         end
     end),
 
+    -- 90% 血量阶段：用竖立的海带模拟骨刺牢笼 + 螺旋骨刺。
+    EventHandler("hermitboss_kelp_snare", function(inst)
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
+            inst.sg:GoToState("kelp_snare")
+        end
+    end),
+
     -- 75% 血量阶段：强制打断当前动作并使用三叉戟召出贝壳堆。
     EventHandler("hermitboss_shell_phase", function(inst)
         if not inst._surrendering
@@ -117,6 +126,65 @@ local states =
                 end
             end),
         },
+    },
+
+    -- ============================
+    -- 90% 血量：海带骨刺（骨刺牢笼 + 螺旋骨刺）
+    -- 复用星杖施法动画作为抬手动作，在帧上释放海带刺。
+    -- ============================
+    State
+    {
+        name = "kelp_snare",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("staff_pre")
+            inst.AnimState:PushAnimation("staff", false)
+
+            -- 动画资源异常时也能自动退出，不会永久卡在施法中。
+            inst.sg:SetTimeout(2.25)
+        end,
+
+        timeline =
+        {
+            TimeEvent(8 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("dontstarve/common/staffteleport")
+            end),
+            TimeEvent(14 * FRAMES, function(inst)
+                inst:SpawnKelpSnare()
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:SpawnKelpSnare()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering
+                and not inst._final_phase_triggered
+                and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
     },
 
     -- ============================

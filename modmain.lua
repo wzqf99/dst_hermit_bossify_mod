@@ -11,6 +11,7 @@ local require = GLOBAL.require
 local TOKEN_PREFAB = "hermitcrab_boss_token"
 local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
+local KELP_SPIKE_PREFAB = "hermitcrab_kelp_spike"
 local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
 local TUNING = require("hermitcrab_boss/tuning")
 
@@ -32,6 +33,7 @@ PrefabFiles =
     TOKEN_PREFAB,
     BOSS_PREFAB,
     BOSS_SHELL_PREFAB,
+    KELP_SPIKE_PREFAB,
 }
 
 -- 房屋默认仍不可攻击；最终阶段只激活本场关联的原版房屋。
@@ -210,3 +212,35 @@ AddPrefabPostInit("hermitcrab", function(inst)
         end
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- 调试指令：c_sc()
+-- 让寄居蟹隐士 Boss 立即释放海带骨刺技能（骨刺牢笼 + 螺旋骨刺），方便测试。
+-- 用法：游戏内按 ~ 打开控制台，输入 c_sc() 即可反复触发。
+-- ---------------------------------------------------------------------------
+GLOBAL.c_sc = function()
+    if GLOBAL.TheWorld == nil then
+        print("[hermit_bossify] c_sc: 世界未加载")
+        return
+    end
+
+    -- 客户端输入时转发到服务端执行
+    if not GLOBAL.TheWorld.ismastersim then
+        GLOBAL.c_remote("c_sc()")
+        return
+    end
+
+    local boss = GLOBAL.TheSim:FindFirstEntityWithTag("hermitcrab_boss")
+    if boss == nil then
+        print("[hermit_bossify] c_sc: 未找到寄居蟹隐士 Boss，请先触发 Boss 战")
+        return
+    end
+
+    -- 清除已触发标志，允许反复测试
+    boss._kelp_snare_triggered = nil
+    boss._kelp_snare_released = nil
+
+    -- 触发完整技能流程（施法动画 + 生成海带）
+    boss:PushEvent("hermitboss_kelp_snare")
+    print("[hermit_bossify] c_sc: 已触发海带骨刺技能")
+end

@@ -15,6 +15,39 @@ return
         WATCH_PERIOD = 2,
     },
 
+    KELP_SNARE =
+    {
+        -- 90% 血量触发，早于贝壳环阶段
+        PHASE_HEALTH = 0.9,
+
+        -- 骨刺牢笼：围绕每个玩家生成一圈海带刺
+        SNARE_RANGE = 40,
+        SNARE_MAX_RANGE = 45,
+
+        -- 螺旋骨刺：从 Boss 脚下螺旋扩散
+        SPIRAL_COUNT = 26,
+        SPIRAL_SPACING = 0.55,
+        SPIRAL_START_RADIUS = 0.5,
+        SPIRAL_RADIUS_STEP = 0.3,
+        SPIRAL_DELAY_PER_STEP = 0.03,
+
+        -- 海带刺持续时间（秒）
+        SPIKE_DURATION = 6,
+
+        -- 海带冒出（grow）动画播放速度倍率：<1 减慢，1 = 原速。
+        -- 0.8 = grow 完整约 1.25 秒，长到定格（0.4 进度）约 0.5 秒，让玩家尽早反应。
+        GROW_SPEED = 0.8,
+
+        -- grow 动画定格进度（0~1）：海带长到该比例时就冻结定格，不再继续长满。
+        -- 0.4 = 叶子长到四成。
+        GROW_FREEZE_PROGRESS = 0.4,
+
+        -- 海带刺接触伤害：海带竖立期间持续生效，由 Boss 造成（仇恨归属 Boss）。
+        SPIKE_DAMAGE = BASE_DAMAGE,
+        SPIKE_CONTACT_RADIUS = 1.6,
+        SPIKE_CONTACT_COOLDOWN = 1,
+    },
+
     SHELL_RING =
     {
         PHASE_HEALTH = 0.75,
