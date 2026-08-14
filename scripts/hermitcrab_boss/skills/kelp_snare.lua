@@ -13,6 +13,7 @@ local KelpSnare =
     PREFABS =
     {
         "hermitcrab_kelp_spike",
+        "hermitcrab_web_ground",
     },
 }
 
@@ -162,6 +163,44 @@ local function SpawnSpiralSpikes(inst)
 end
 
 --------------------------------------------------------------------------
+-- 效果三：铺蛛网（减速玩家，不影响 Boss）
+-- 在海带骨刺释放前先铺一圈蛛网，限制玩家走位。
+--------------------------------------------------------------------------
+local function SpawnWebAt(inst, x, z)
+    local web = SpawnPrefab("hermitcrab_web_ground")
+    if web == nil then
+        return
+    end
+
+    web.Transform:SetPosition(x, 0, z)
+    web.radius = tuning.WEB_RADIUS
+    web.penalty = tuning.WEB_SPEED_PENALTY
+    web.duration = tuning.WEB_DURATION
+
+    local scale = tuning.WEB_VISUAL_SCALE
+    web.Transform:SetScale(scale, scale, scale)
+end
+
+local function SpawnWebField(inst)
+    local x, _, z = inst.Transform:GetWorldPosition()
+
+    -- 中心一片
+    SpawnWebAt(inst, x, z)
+
+    -- 内环
+    for i = 1, tuning.WEB_INNER_COUNT do
+        local theta = TWOPI * (i - 1) / tuning.WEB_INNER_COUNT
+        SpawnWebAt(inst, x + tuning.WEB_INNER_RADIUS * math.cos(theta), z + tuning.WEB_INNER_RADIUS * math.sin(theta))
+    end
+
+    -- 外环
+    for i = 1, tuning.WEB_OUTER_COUNT do
+        local theta = TWOPI * (i - 1) / tuning.WEB_OUTER_COUNT
+        SpawnWebAt(inst, x + tuning.WEB_OUTER_RADIUS * math.cos(theta), z + tuning.WEB_OUTER_RADIUS * math.sin(theta))
+    end
+end
+
+--------------------------------------------------------------------------
 -- 触发入口：由 SG 施法状态在动画帧调用
 --------------------------------------------------------------------------
 local function Spawn(inst)
@@ -184,7 +223,9 @@ local function Spawn(inst)
     SpawnSpiralSpikes(inst)
 end
 
-local function Begin(inst)
+-- 完整连招入口：先铺蛛网，再进入海带骨刺施法流程。
+-- 由 50% 血量触发（OnHealthDelta -> Begin）与调试指令 c_sc 共用。
+local function CastKelpSnare(inst)
     if inst._kelp_snare_triggered
         or inst._final_phase_triggered
         or inst._encounter_resolved
@@ -194,7 +235,16 @@ local function Begin(inst)
 
     inst._kelp_snare_triggered = true
     inst.components.combat:CancelAttack()
+
+    -- 先铺蛛网：立即在 Boss 周围铺一圈减速网。
+    SpawnWebField(inst)
+
+    -- 再放海带骨刺：走状态机施法动画，稍后生成海带牢笼 + 螺旋。
     inst:PushEvent("hermitboss_kelp_snare")
+end
+
+local function Begin(inst)
+    CastKelpSnare(inst)
 end
 
 local function OnHealthDelta(inst, data)
@@ -216,6 +266,7 @@ end
 
 function KelpSnare.Attach(inst, encounter_finished_event, final_phase_started_event)
     inst.SpawnKelpSnare = Spawn
+    inst.CastKelpSnare = CastKelpSnare
 
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)

@@ -25,10 +25,11 @@ return
         SNARE_MAX_RANGE = 45,
 
         -- 螺旋骨刺：从 Boss 脚下螺旋扩散
-        SPIRAL_COUNT = 26,
-        SPIRAL_SPACING = 0.55,
+        -- 总覆盖半径 ≈ SPIRAL_START_RADIUS + SPIRAL_COUNT * SPIRAL_RADIUS_STEP ≈ 16.5
+        SPIRAL_COUNT = 40,
+        SPIRAL_SPACING = 0.6,
         SPIRAL_START_RADIUS = 0.5,
-        SPIRAL_RADIUS_STEP = 0.3,
+        SPIRAL_RADIUS_STEP = 0.4,
         SPIRAL_DELAY_PER_STEP = 0.03,
 
         -- 海带刺持续时间（秒）
@@ -46,6 +47,16 @@ return
         SPIKE_DAMAGE = BASE_DAMAGE,
         SPIKE_CONTACT_RADIUS = 1.6,
         SPIKE_CONTACT_COOLDOWN = 1,
+
+        -- 铺蛛网：海带骨刺释放前先在 Boss 周围铺一圈蛛网减速玩家（不影响 Boss 自己）。
+        WEB_RADIUS = 4,              -- 单片蛛网的减速半径
+        WEB_SPEED_PENALTY = 0.3,     -- 减速后速度比例（越小越慢）
+        WEB_DURATION = 10,           -- 蛛网持续时间（秒）
+        WEB_VISUAL_SCALE = 2,        -- 蛛网视觉缩放
+        WEB_INNER_RADIUS = 2,        -- 内环半径
+        WEB_INNER_COUNT = 4,         -- 内环网片数量
+        WEB_OUTER_RADIUS = 5,        -- 外环半径
+        WEB_OUTER_COUNT = 8,         -- 外环网片数量
     },
 
     SHELL_RING =

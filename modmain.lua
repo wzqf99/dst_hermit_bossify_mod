@@ -12,6 +12,7 @@ local TOKEN_PREFAB = "hermitcrab_boss_token"
 local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
 local KELP_SPIKE_PREFAB = "hermitcrab_kelp_spike"
+local WEB_GROUND_PREFAB = "hermitcrab_web_ground"
 local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
 local TUNING = require("hermitcrab_boss/tuning")
 
@@ -34,6 +35,7 @@ PrefabFiles =
     BOSS_PREFAB,
     BOSS_SHELL_PREFAB,
     KELP_SPIKE_PREFAB,
+    WEB_GROUND_PREFAB,
 }
 
 -- 房屋默认仍不可攻击；最终阶段只激活本场关联的原版房屋。
@@ -240,7 +242,7 @@ GLOBAL.c_sc = function()
     boss._kelp_snare_triggered = nil
     boss._kelp_snare_released = nil
 
-    -- 触发完整技能流程（施法动画 + 生成海带）
-    boss:PushEvent("hermitboss_kelp_snare")
-    print("[hermit_bossify] c_sc: 已触发海带骨刺技能")
+    -- 触发完整连招流程（先铺蛛网，再施法释放海带骨刺）
+    boss:CastKelpSnare()
+    print("[hermit_bossify] c_sc: 已触发铺蛛网 + 海带骨刺连招")
 end
