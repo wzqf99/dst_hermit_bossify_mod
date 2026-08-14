@@ -1,4 +1,4 @@
--- 蟹卫召唤技能：血量降至 50% 时，使用星杖动作召唤三只蟹卫（复用原版 crabking_mob）。
+-- 蟹卫召唤技能：血量降至 90% 时，使用星杖动作召唤三只蟹卫（复用原版 crabking_mob）。
 local tuning = require("hermitcrab_boss/tuning").GUARD_SUMMON
 
 local GuardSummon =
@@ -115,6 +115,7 @@ local function Begin(inst)
 
     inst._guard_summon_triggered = true
     inst.components.combat:CancelAttack()
+    -- 打开岛上堵住裂缝的逻辑由 hermitcrab_boss/fissure 模块监听本事件处理。
     inst:PushEvent("hermitboss_guard_summon")
 end
 

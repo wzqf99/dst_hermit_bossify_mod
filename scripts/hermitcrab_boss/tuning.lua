@@ -79,6 +79,15 @@ return
         SPAWN_ATTEMPTS = 30,
     },
 
+    -- 堵住裂缝 Boss 战强化：随战斗阶段推进逐级"变大"（月相等级 1~5）。
+    FISSURES =
+    {
+        OPEN_LEVEL  = 2, -- 90% 蟹卫召唤：弦月（微光、低理智光环）
+        SHELL_LEVEL = 3, -- 75% 贝壳环：半月
+        SNARE_LEVEL = 4, -- 50% 海带骨刺：月盈月亏
+        FINAL_LEVEL = 5, -- 30% 最终阶段：满月（全亮、理智光环最高）
+    },
+
     FINAL_PHASE =
     {
         PHASE_HEALTH = 0.3,

@@ -5,6 +5,7 @@ local kelp_snare = require("hermitcrab_boss/skills/kelp_snare")
 local shell_ring = require("hermitcrab_boss/skills/shell_ring")
 local guard_summon = require("hermitcrab_boss/skills/guard_summon")
 local final_phase = require("hermitcrab_boss/skills/final_phase")
+local fissure = require("hermitcrab_boss/fissure")
 local tuning = require("hermitcrab_boss/tuning")
 
 local assets =
@@ -132,6 +133,7 @@ local function fn()
     -- 最终阶段先监听，保证跨过 30% 的高额伤害不会直接触发旧投降结算。
     final_phase.Attach(inst, encounter.FINISHING_EVENT)
     encounter.Attach(inst)
+    fissure.Attach(inst, encounter.FINISHED_EVENT)
     kelp_snare.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
     shell_ring.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
     guard_summon.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
