@@ -48,15 +48,11 @@ return
         SPIKE_CONTACT_RADIUS = 1.6,
         SPIKE_CONTACT_COOLDOWN = 1,
 
-        -- 铺蛛网：海带骨刺释放前先在 Boss 周围铺一圈蛛网减速玩家（不影响 Boss 自己）。
-        WEB_RADIUS = 4,              -- 单片蛛网的减速半径
+        -- 铺蛛网：海带骨刺释放前在 Boss 脚下铺一片蛛网减速玩家（不影响 Boss 自己）。
+        WEB_RADIUS = 6,              -- 单片蛛网的减速半径（与原版 BOOK_WEB_GROUND_RADIUS 一致）
         WEB_SPEED_PENALTY = 0.3,     -- 减速后速度比例（越小越慢）
         WEB_DURATION = 10,           -- 蛛网持续时间（秒）
-        WEB_VISUAL_SCALE = 2,        -- 蛛网视觉缩放
-        WEB_INNER_RADIUS = 2,        -- 内环半径
-        WEB_INNER_COUNT = 4,         -- 内环网片数量
-        WEB_OUTER_RADIUS = 5,        -- 外环半径
-        WEB_OUTER_COUNT = 8,         -- 外环网片数量
+        WEB_VISUAL_SCALE = 1.25,     -- 蛛网视觉缩放（与原版 book_web_ground 一致）
     },
 
     SHELL_RING =

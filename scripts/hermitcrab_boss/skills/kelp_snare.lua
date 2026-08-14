@@ -184,20 +184,8 @@ end
 local function SpawnWebField(inst)
     local x, _, z = inst.Transform:GetWorldPosition()
 
-    -- 中心一片
+    -- 只在 Boss 脚下铺一片蛛网。
     SpawnWebAt(inst, x, z)
-
-    -- 内环
-    for i = 1, tuning.WEB_INNER_COUNT do
-        local theta = TWOPI * (i - 1) / tuning.WEB_INNER_COUNT
-        SpawnWebAt(inst, x + tuning.WEB_INNER_RADIUS * math.cos(theta), z + tuning.WEB_INNER_RADIUS * math.sin(theta))
-    end
-
-    -- 外环
-    for i = 1, tuning.WEB_OUTER_COUNT do
-        local theta = TWOPI * (i - 1) / tuning.WEB_OUTER_COUNT
-        SpawnWebAt(inst, x + tuning.WEB_OUTER_RADIUS * math.cos(theta), z + tuning.WEB_OUTER_RADIUS * math.sin(theta))
-    end
 end
 
 --------------------------------------------------------------------------
