@@ -1,6 +1,8 @@
 -- 本场 Boss 战专用的环绕贝壳堆。
 -- 只复用原版 shell_cluster 外观，不带采矿、掉落或水下打捞逻辑。
 
+local tuning = require("hermitcrab_boss/tuning").SHELL_RING
+
 local assets =
 {
     Asset("ANIM", "anim/singingshell_cluster.zip"),
@@ -24,7 +26,6 @@ local UPDATE_PERIOD = FRAMES
 local MAX_FOLLOW_DISTANCE = 8
 local CONTACT_RADIUS = 0.75 -- 与原版 shell_cluster 的碰撞半径一致
 local CONTACT_CHECK_PERIOD = 0.1
-local MAX_CONTACTS = 3
 local BASE_SCALE = 0.6
 local BASE_SHADOW_WIDTH = 1.15
 local BASE_SHADOW_HEIGHT = 0.5
@@ -104,7 +105,7 @@ end
 
 local function RecordContact(inst)
     inst._contact_count = inst._contact_count + 1
-    if inst._contact_count >= MAX_CONTACTS then
+    if inst._contact_count >= tuning.MAX_CONTACTS then
         BreakShell(inst)
         return true
     end

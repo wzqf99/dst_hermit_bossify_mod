@@ -21,6 +21,8 @@ return
         COUNT = 6,
         CONTACT_DAMAGE = BASE_DAMAGE,
         CONTACT_COOLDOWN = 1,
+        -- 每枚贝壳累计碰撞多少次后破碎
+        MAX_CONTACTS = 3,
         WATER_MIN_RADIUS = 22,
         WATER_MAX_RADIUS = 40,
         WATER_FALLBACK_RADIUS = 55,

@@ -20,6 +20,12 @@ if type(configured_health) == "number" and configured_health > 0 then
     TUNING.MAX_HEALTH = configured_health
 end
 
+-- 从模组配置读取贝壳碰撞次数；配置缺失或非法时回退到 tuning 默认值（3）。
+local configured_shell_contacts = GetModConfigData("shell_contacts")
+if type(configured_shell_contacts) == "number" and configured_shell_contacts > 0 then
+    TUNING.SHELL_RING.MAX_CONTACTS = configured_shell_contacts
+end
+
 -- 注册让游戏加载的 prefab 文件（对应 scripts/prefabs/ 下的同名文件）
 PrefabFiles =
 {

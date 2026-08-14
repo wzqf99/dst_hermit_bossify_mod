@@ -26,4 +26,18 @@ configuration_options =
         },
         default = 6000,
     },
+    {
+        name = "shell_contacts",
+        label = "贝壳碰撞次数",
+        hover = "每枚贝壳累计碰撞多少次后破碎（数值越大越难打碎）。",
+        options =
+        {
+            { description = "1 次（易碎）", data = 1 },
+            { description = "2 次", data = 2 },
+            { description = "3 次（默认）", data = 3 },
+            { description = "5 次", data = 5 },
+            { description = "10 次（坚固）", data = 10 },
+        },
+        default = 3,
+    },
 }
