@@ -227,8 +227,8 @@ local function OnHouseAttacked(house)
         return
     end
 
-    -- 受击反馈：白光闪烁 + 上下压扁（被砸扁），快速回弹。
-    SquashHouseFx(house, 1.06, 0.84, 0.14, true)
+    -- 受击反馈：白光闪烁 + 横向收窄 + 纵向拉高（反冲），快速回弹。
+    SquashHouseFx(house, 0.88, 1.12, 0.14, true)
 end
 
 local function TryRetargetMissiles(inst)
@@ -321,8 +321,8 @@ LaunchMissiles = function(inst)
         end
 
         if count > 0 then
-            -- 发射反冲：房子横向收窄 + 纵向拉高，表示这轮飞弹是从房子射出的。
-            SquashHouseFx(house, 0.88, 1.12, 0.2, false)
+            -- 发射反冲：房子横向拉伸 + 纵向压扁，表示这轮飞弹是从房子射出的。
+            SquashHouseFx(house, 1.06, 0.84, 0.2, false)
         end
 
         inst._final_target_cursor = (target_cursor + count - 1) % #targets + 1
@@ -460,8 +460,8 @@ local function ThrowBottleVolley(inst)
                 end
             end)
         end
-        -- 投掷反冲：房子横向收窄 + 纵向拉高，表示瓶子是从房子扔出的。
-        SquashHouseFx(house, 0.88, 1.12, 0.2, false)
+        -- 投掷反冲：房子横向拉伸 + 纵向压扁，表示瓶子是从房子扔出的。
+        SquashHouseFx(house, 1.06, 0.84, 0.2, false)
     end
 
     ScheduleBottleVolley(inst)

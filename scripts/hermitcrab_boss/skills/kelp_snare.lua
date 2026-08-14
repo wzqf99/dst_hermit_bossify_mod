@@ -90,6 +90,44 @@ local function SpawnSnares(inst, targets)
 end
 
 --------------------------------------------------------------------------
+-- 循环施放：50% 首次释放后每 REPEAT_INTERVAL 秒重放一次牢笼，
+-- 直到 Boss 钻入屋子（最终阶段 _final_phase_triggered）或投降 / 战斗结束。
+-- 首次由 Spawn 启动定时器；之后每轮 RepeatCast 把 _released 复位后
+-- 推事件走施法状态机，Spawn 再次实际释放时重新起 8 秒倒计时。
+--------------------------------------------------------------------------
+local function RepeatCast(inst)
+    if inst._surrendering
+        or inst._final_phase_triggered
+        or inst._encounter_resolved then
+        StopRepeat(inst)
+        return
+    end
+
+    -- 允许本轮重新生成，再推事件走施法动画（与首次触发共用 kelp_cast）。
+    inst._kelp_snare_released = nil
+    inst.components.combat:CancelAttack()
+    inst:PushEvent(events.KELP_SNARE)
+end
+
+local function StartRepeat(inst)
+    if inst._kelp_snare_task ~= nil then
+        inst._kelp_snare_task:Cancel()
+    end
+    inst._kelp_snare_task = inst:DoPeriodicTask(
+        tuning.REPEAT_INTERVAL,
+        RepeatCast,
+        tuning.REPEAT_INTERVAL
+    )
+end
+
+local function StopRepeat(inst)
+    if inst._kelp_snare_task ~= nil then
+        inst._kelp_snare_task:Cancel()
+        inst._kelp_snare_task = nil
+    end
+end
+
+--------------------------------------------------------------------------
 -- 触发入口：由 SG 施法状态在动画帧调用
 --------------------------------------------------------------------------
 local function Spawn(inst)
@@ -109,6 +147,9 @@ local function Spawn(inst)
     if targets ~= nil then
         SpawnSnares(inst, targets)
     end
+
+    -- 每次实际释放后重新起 8 秒倒计时，形成"每 8 秒释放一次"的循环。
+    StartRepeat(inst)
 end
 
 -- 完整连招入口：由 phase_scheduler 在 50% 血量跨越时触发，也可由调试指令 c_sc 调用。
@@ -129,6 +170,7 @@ end
 -- 清理本模块的临时状态。战斗结束 / 最终阶段开始时被调用，
 -- 防止残留标志影响（本 Boss 实例会被移除，这里主要起防御作用）。
 local function OnEncounterFinished(inst)
+    StopRepeat(inst)
     inst._kelp_snare_released = nil
 end
 
