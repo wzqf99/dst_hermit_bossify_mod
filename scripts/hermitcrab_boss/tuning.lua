@@ -143,5 +143,11 @@ return
         MISSILE_INTERVAL_MAX = 11,
         MISSILE_MAX_COUNT = 4,
         MISSILE_SHOW_DELAY = FRAMES,
+
+        -- 房屋囚笼：进入房屋后，每隔一段时间在房屋一圈召唤海带刺牢笼
+        --（复用 50% 海带刺 kelp_spike，伤害归属 Boss）。
+        HOUSE_SNARE_INTERVAL = 10,   -- 召唤间隔（秒）
+        HOUSE_SNARE_COUNT = 12,      -- 每圈海带刺数量
+        HOUSE_SNARE_OFFSET = 2.5,    -- 距房屋边缘的偏移（半径 = 房屋物理半径 + 偏移）
     },
 }

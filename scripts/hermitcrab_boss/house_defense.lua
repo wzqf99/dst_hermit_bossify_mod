@@ -1,4 +1,5 @@
 local util = require("hermitcrab_boss/util")
+local kelp_spike = require("hermitcrab_boss/skills/kelp_spike")
 local tuning = require("hermitcrab_boss/tuning").FINAL_PHASE
 
 local HouseDefense =
@@ -156,6 +157,29 @@ end
 
 local function RemoveFinalMinions(inst)
     util.RemoveEntityList(inst, "_final_minions")
+end
+
+-- 房屋囚笼：围绕房屋一圈生成海带刺，形成牢笼。
+-- 复用 kelp_spike.SpawnSpikeAt（伤害归属 Boss），每圈数量/半径由调参控制。
+local function SpawnHouseSnareRing(inst, house)
+    if not IsActive(inst) or house == nil or not house:IsValid() then
+        return
+    end
+
+    local x, _, z = house.Transform:GetWorldPosition()
+    local radius = house:GetPhysicsRadius(0) + tuning.HOUSE_SNARE_OFFSET
+    local num = tuning.HOUSE_SNARE_COUNT
+    local dtheta = TWOPI / num
+    local map = TheWorld.Map
+
+    for theta = math.random() * dtheta, TWOPI, dtheta do
+        local x1 = x + radius * math.cos(theta)
+        local z1 = z + radius * math.sin(theta)
+        if map:IsPassableAtPoint(x1, 0, z1)
+            and not map:IsPointNearHole(Vector3(x1, 0, z1)) then
+            kelp_spike.SpawnSpikeAt(inst, x1, z1, nil, nil, 0)
+        end
+    end
 end
 
 local function RemoveMissile(inst, missile, onremove)
@@ -553,6 +577,7 @@ function HouseDefense.Cleanup(inst, release_hermit)
     CancelTask(inst, "_final_bottle_task")
     CancelTask(inst, "_final_missile_task")
     CancelTask(inst, "_final_missile_watch_task")
+    CancelTask(inst, "_final_house_snare_task")
     RemoveAllBottles(inst)
     RemoveAllMissiles(inst)
     RemoveFinalMinions(inst)
@@ -691,6 +716,18 @@ function HouseDefense.Activate(inst)
     ScheduleBottleVolley(inst)
     LaunchMissiles(inst)
     SpawnFissureMinions(inst, house)
+
+    -- 房屋囚笼：进入房屋后每隔 HOUSE_SNARE_INTERVAL 秒在房屋一圈召唤海带刺牢笼。
+    inst._final_house_snare_task = inst:DoPeriodicTask(
+        tuning.HOUSE_SNARE_INTERVAL,
+        function()
+            local current_house = inst._final_house
+            if IsActive(inst) and current_house ~= nil and current_house:IsValid() then
+                SpawnHouseSnareRing(inst, current_house)
+            end
+        end,
+        tuning.HOUSE_SNARE_INTERVAL
+    )
     inst._final_missile_watch_task = inst:DoPeriodicTask(
         tuning.PLAYER_SCAN_PERIOD,
         TryRetargetMissiles,
