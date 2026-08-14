@@ -111,7 +111,7 @@ local function Finish(inst, victory, already_removing)
         end
     end
 
-    -- 技能模块在这里清理场上实体，并在奶奶回到场景后结算关联状态。
+    -- 技能模块在这里清理场上实体，并在奶奶回到场景后结算关联状态。1
     inst:PushEvent(Encounter.FINISHED_EVENT, {
         hermit = hermit ~= nil and hermit:IsValid() and hermit or nil,
         victory = victory,
