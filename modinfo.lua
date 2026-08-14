@@ -1,6 +1,6 @@
 name = "寄居蟹隐士 Boss"
-description = "将帝王蟹的信物交给寄居蟹隐士，向她发起挑战。"
-author = "69434"
+description = "将帝王蟹的信物交给寄居蟹隐士，向她发起挑战，胜利后获取珍珠"
+author = "夜阑"
 version = "0.1.0"
 
 api_version = 10
