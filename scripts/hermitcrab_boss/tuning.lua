@@ -17,8 +17,8 @@ return
 
     KELP_SNARE =
     {
-        -- 90% 血量触发，早于贝壳环阶段
-        PHASE_HEALTH = 0.9,
+        -- 50% 血量触发（与蟹卫召唤对调后）
+        PHASE_HEALTH = 0.5,
 
         -- 骨刺牢笼：围绕每个玩家生成一圈海带刺
         SNARE_RANGE = 40,
@@ -65,7 +65,7 @@ return
 
     GUARD_SUMMON =
     {
-        PHASE_HEALTH = 0.5,
+        PHASE_HEALTH = 0.9,
         COUNT = 3,
         SPAWN_MIN_RADIUS = 2,
         SPAWN_MAX_RADIUS = 5,
