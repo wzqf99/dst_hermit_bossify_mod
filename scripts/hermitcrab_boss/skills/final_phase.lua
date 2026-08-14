@@ -1,9 +1,10 @@
+local events = require("hermitcrab_boss/events")
 local house_defense = require("hermitcrab_boss/house_defense")
+local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
 local tuning = require("hermitcrab_boss/tuning").FINAL_PHASE
 
 local FinalPhase =
 {
-    STARTED_EVENT = "hermitboss_final_phase_started",
     PREFABS =
     {
         "hermitcrab_fx_small",
@@ -34,13 +35,16 @@ local function EnterHouseDefense(inst)
     house_defense.Activate(inst)
 end
 
-local function Begin(inst)
-    if inst._final_phase_triggered
+-- 由 phase_scheduler 在 30% 血量跨越时触发。
+-- 这是最后一个阶段，一旦触发其他阶段技能都会停止（_final_phase_triggered 置位）。
+local function Trigger(inst)
+    if phase_scheduler.IsTriggered(inst, events.FINAL_PHASE_STARTED)
         or inst._encounter_resolved
         or inst._surrendering then
         return
     end
 
+    phase_scheduler.MarkTriggered(inst, events.FINAL_PHASE_STARTED)
     inst._final_phase_triggered = true
     inst._final_state = FinalPhase.STATE.ENTER_FINAL_PHASE
     inst.components.health:SetInvincible(true)
@@ -48,18 +52,8 @@ local function Begin(inst)
     inst.components.combat:CancelAttack()
     inst.components.locomotor:Stop()
     inst:StopBrain("hermitboss_final_phase")
-    inst:PushEvent(FinalPhase.STARTED_EVENT)
-    inst:PushEvent("hermitboss_enter_final_phase")
-end
-
-local function OnHealthDelta(inst, data)
-    if not inst._final_phase_triggered
-        and not inst._surrendering
-        and data ~= nil
-        and data.oldpercent > tuning.PHASE_HEALTH
-        and data.newpercent <= tuning.PHASE_HEALTH then
-        Begin(inst)
-    end
+    inst:PushEvent(events.FINAL_PHASE_STARTED)
+    inst:PushEvent(events.ENTER_FINAL_PHASE)
 end
 
 local function OnEncounterFinishing(inst)
@@ -74,12 +68,12 @@ function FinalPhase.RegisterHousePostInits(add_prefab_post_init)
     house_defense.RegisterHousePostInits(add_prefab_post_init)
 end
 
-function FinalPhase.Attach(inst, encounter_finishing_event)
+function FinalPhase.Attach(inst)
     inst._final_state = FinalPhase.STATE.NORMAL
+    inst.TriggerFinalPhase = Trigger
     inst.EnterHouseDefense = EnterHouseDefense
 
-    inst:ListenForEvent("healthdelta", OnHealthDelta)
-    inst:ListenForEvent(encounter_finishing_event, OnEncounterFinishing)
+    inst:ListenForEvent(events.ENCOUNTER_FINISHING, OnEncounterFinishing)
     inst:ListenForEvent("onremove", OnRemoveEntity)
 end
 

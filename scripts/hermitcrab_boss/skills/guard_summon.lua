@@ -1,4 +1,7 @@
 -- 蟹卫召唤技能：血量降至 90% 时，使用星杖动作召唤三只蟹卫（复用原版 crabking_mob）。
+local events = require("hermitcrab_boss/events")
+local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
+local util = require("hermitcrab_boss/util")
 local tuning = require("hermitcrab_boss/tuning").GUARD_SUMMON
 
 local GuardSummon =
@@ -87,56 +90,35 @@ local function SpawnGuards(inst)
 end
 
 local function RemoveGuards(inst)
-    if inst._summoned_guards == nil then
-        return
-    end
-
-    for _, guard in ipairs(inst._summoned_guards) do
-        if guard:IsValid() then
-            guard:Remove()
-        end
-    end
-    inst._summoned_guards = nil
+    util.RemoveEntityList(inst, "_summoned_guards")
 end
 
 local function OnEncounterFinished(inst)
     RemoveGuards(inst)
     inst._guard_summon_released = nil
-    inst._guard_summon_triggered = nil
 end
 
-local function Begin(inst)
-    if inst._guard_summon_triggered
+-- 由 phase_scheduler 在 90% 血量跨越时触发。
+local function Trigger(inst)
+    if phase_scheduler.IsTriggered(inst, events.GUARD_SUMMON)
         or inst._final_phase_triggered
         or inst._encounter_resolved
         or inst._surrendering then
         return
     end
 
-    inst._guard_summon_triggered = true
+    phase_scheduler.MarkTriggered(inst, events.GUARD_SUMMON)
     inst.components.combat:CancelAttack()
     -- 打开岛上堵住裂缝的逻辑由 hermitcrab_boss/fissure 模块监听本事件处理。
-    inst:PushEvent("hermitboss_guard_summon")
+    inst:PushEvent(events.GUARD_SUMMON)
 end
 
-local function OnHealthDelta(inst, data)
-    if not inst._guard_summon_triggered
-        and not inst._final_phase_triggered
-        and not inst._surrendering
-        and inst.components.health.currenthealth > inst.components.health.minhealth
-        and data ~= nil
-        and data.oldpercent > tuning.PHASE_HEALTH
-        and data.newpercent <= tuning.PHASE_HEALTH then
-        Begin(inst)
-    end
-end
-
-function GuardSummon.Attach(inst, encounter_finished_event, final_phase_started_event)
+function GuardSummon.Attach(inst)
     inst.SpawnGuards = SpawnGuards
+    inst.TriggerGuardSummon = Trigger
 
-    inst:ListenForEvent("healthdelta", OnHealthDelta)
-    inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)
-    inst:ListenForEvent(final_phase_started_event, RemoveGuards)
+    inst:ListenForEvent(events.ENCOUNTER_FINISHED, OnEncounterFinished)
+    inst:ListenForEvent(events.FINAL_PHASE_STARTED, RemoveGuards)
 end
 
 return GuardSummon

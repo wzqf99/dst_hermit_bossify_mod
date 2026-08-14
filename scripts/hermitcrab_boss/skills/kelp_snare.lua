@@ -1,11 +1,13 @@
 -- ============================================================================
--- 海带骨刺技能：血量降至 90% 时触发。
+-- 海带骨刺技能：血量降至 50% 时触发。
 -- 用"竖立的海带"（海带植株 bullkelp 的竖立形态）模拟远古织影者的两个技能：
 --   1. Snare 骨刺牢笼：围绕目标一圈竖立海带，形成牢笼并造成接触伤害。
 --   2. Spikes 螺旋骨刺：从 Boss 脚下螺旋扩散的竖立海带，逐个延迟冒出。
 -- 视觉实体复用 hermitcrab_kelp_spike（海带植株竖立形态）。
 -- ============================================================================
 
+local events = require("hermitcrab_boss/events")
+local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
 local tuning = require("hermitcrab_boss/tuning").KELP_SNARE
 
 local KelpSnare =
@@ -212,54 +214,39 @@ local function Spawn(inst)
 end
 
 -- 完整连招入口：先铺蛛网，再进入海带骨刺施法流程。
--- 由 50% 血量触发（OnHealthDelta -> Begin）与调试指令 c_sc 共用。
-local function CastKelpSnare(inst)
-    if inst._kelp_snare_triggered
+-- 由 phase_scheduler 在 50% 血量跨越时触发，也可由调试指令 c_sc 调用。
+-- 互斥标志统一存放在 inst._phase_triggered[events.KELP_SNARE]。
+local function Trigger(inst)
+    if phase_scheduler.IsTriggered(inst, events.KELP_SNARE)
         or inst._final_phase_triggered
         or inst._encounter_resolved
         or inst._surrendering then
         return
     end
 
-    inst._kelp_snare_triggered = true
+    phase_scheduler.MarkTriggered(inst, events.KELP_SNARE)
     inst.components.combat:CancelAttack()
 
     -- 先铺蛛网：立即在 Boss 周围铺一圈减速网。
     SpawnWebField(inst)
 
     -- 再放海带骨刺：走状态机施法动画，稍后生成海带牢笼 + 螺旋。
-    inst:PushEvent("hermitboss_kelp_snare")
+    inst:PushEvent(events.KELP_SNARE)
 end
 
-local function Begin(inst)
-    CastKelpSnare(inst)
-end
-
-local function OnHealthDelta(inst, data)
-    if not inst._kelp_snare_triggered
-        and not inst._final_phase_triggered
-        and not inst._surrendering
-        and inst.components.health.currenthealth > inst.components.health.minhealth
-        and data ~= nil
-        and data.oldpercent > tuning.PHASE_HEALTH
-        and data.newpercent <= tuning.PHASE_HEALTH then
-        Begin(inst)
-    end
-end
-
+-- 清理本模块的临时状态。战斗结束 / 最终阶段开始时被调用，
+-- 防止残留标志影响（本 Boss 实例会被移除，这里主要起防御作用）。
 local function OnEncounterFinished(inst)
     inst._kelp_snare_released = nil
-    inst._kelp_snare_triggered = nil
 end
 
-function KelpSnare.Attach(inst, encounter_finished_event, final_phase_started_event)
+function KelpSnare.Attach(inst)
     inst.SpawnKelpSnare = Spawn
-    inst.CastKelpSnare = CastKelpSnare
+    inst.CastKelpSnare = Trigger
+    inst.TriggerKelpSnare = Trigger
 
-    inst:ListenForEvent("healthdelta", OnHealthDelta)
-    inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)
-    -- 进入最终阶段或贝壳环阶段时，若尚未触发则不再触发。
-    inst:ListenForEvent(final_phase_started_event, OnEncounterFinished)
+    inst:ListenForEvent(events.ENCOUNTER_FINISHED, OnEncounterFinished)
+    inst:ListenForEvent(events.FINAL_PHASE_STARTED, OnEncounterFinished)
 end
 
 return KelpSnare

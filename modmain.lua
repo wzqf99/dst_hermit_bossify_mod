@@ -13,7 +13,9 @@ local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
 local KELP_SPIKE_PREFAB = "hermitcrab_kelp_spike"
 local WEB_GROUND_PREFAB = "hermitcrab_web_ground"
+local EVENTS = require("hermitcrab_boss/events")
 local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
+local PHASE_SCHEDULER = require("hermitcrab_boss/phase_scheduler")
 local TUNING = require("hermitcrab_boss/tuning")
 
 -- 从模组配置读取 Boss 生命值；配置缺失或非法时回退到 tuning 默认值（5200）。
@@ -238,11 +240,11 @@ GLOBAL.c_sc = function()
         return
     end
 
-    -- 清除已触发标志，允许反复测试
-    boss._kelp_snare_triggered = nil
+    -- 清除已触发标志（调度器统一维护互斥，允许反复测试）
+    PHASE_SCHEDULER.ResetPhase(boss, EVENTS.KELP_SNARE)
     boss._kelp_snare_released = nil
 
     -- 触发完整连招流程（先铺蛛网，再施法释放海带骨刺）
-    boss:CastKelpSnare()
+    boss:TriggerKelpSnare()
     print("[hermit_bossify] c_sc: 已触发铺蛛网 + 海带骨刺连招")
 end

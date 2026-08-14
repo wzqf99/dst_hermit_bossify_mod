@@ -2,6 +2,8 @@
 -- 90% 血时将堵住裂缝替换为真正的天体裂缝（moon_fissure）并播打开动画，
 -- 之后随战斗阶段推进逐级"变大"（月相等级 1~5：发光渐强、理智光环渐强）。
 -- 只操作本 Boss 打开的那些裂隙，不影响地图上其他原版天体裂缝。
+local events = require("hermitcrab_boss/events")
+
 local Fissure = {}
 local tuning = require("hermitcrab_boss/tuning").FISSURES
 
@@ -120,28 +122,50 @@ local function RestoreFissures(inst)
     end
 end
 
-function Fissure.Attach(inst, encounter_finished_event)
+-- 对外接口：返回已打开的裂隙坐标（含可通过性过滤），
+-- 供最终阶段召唤蟹骑士/蟹卫使用。裂隙未打开时返回空表。
+-- 返回坐标而非实体引用，避免调用方与内部实现（_opened_fissures）耦合。
+function Fissure.GetOpenedFissurePoints(inst)
+    local points = {}
+    if inst._opened_fissures == nil then
+        return points
+    end
+    for _, fissure in ipairs(inst._opened_fissures) do
+        if fissure ~= nil and fissure:IsValid() then
+            local x, _, z = fissure.Transform:GetWorldPosition()
+            if TheWorld.Map:IsPassableAtPoint(x, 0, z) then
+                table.insert(points, Vector3(x, 0, z))
+            end
+        end
+    end
+    return points
+end
+
+function Fissure.Attach(inst)
     inst.OpenIslandFissures = OpenIslandFissures
+    inst.GetOpenedFissurePoints = Fissure.GetOpenedFissurePoints
 
     -- 90% 蟹卫召唤：打开裂隙并进入弦月。
-    inst:ListenForEvent("hermitboss_guard_summon", function()
+    inst:ListenForEvent(events.GUARD_SUMMON, function()
         OpenIslandFissures(inst)
         SetOpenedFissuresLevel(inst, tuning.OPEN_LEVEL)
     end)
     -- 75% 贝壳环：半月。
-    inst:ListenForEvent("hermitboss_shell_phase", function()
+    inst:ListenForEvent(events.SHELL_PHASE, function()
         SetOpenedFissuresLevel(inst, tuning.SHELL_LEVEL)
     end)
     -- 50% 海带骨刺：月盈月亏。
-    inst:ListenForEvent("hermitboss_kelp_snare", function()
+    inst:ListenForEvent(events.KELP_SNARE, function()
         SetOpenedFissuresLevel(inst, tuning.SNARE_LEVEL)
     end)
     -- 30% 最终阶段：满月（全亮、理智光环最高）。
-    inst:ListenForEvent("hermitboss_final_phase_started", function()
+    -- 兜底：若跳级伤害直接进入最终阶段（裂隙可能还没打开），这里先打开再升满月。
+    inst:ListenForEvent(events.FINAL_PHASE_STARTED, function()
+        OpenIslandFissures(inst)
         SetOpenedFissuresLevel(inst, tuning.FINAL_LEVEL)
     end)
     -- 战斗结束：恢复真实月相。
-    inst:ListenForEvent(encounter_finished_event, function()
+    inst:ListenForEvent(events.ENCOUNTER_FINISHED, function()
         RestoreFissures(inst)
     end)
 end

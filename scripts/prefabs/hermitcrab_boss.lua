@@ -1,11 +1,13 @@
 -- Boss 实体：只负责外观、基础战斗组件和功能模块装配。
 local brain = require("brains/hermitcrab_bossbrain")
 local encounter = require("hermitcrab_boss/encounter")
-local kelp_snare = require("hermitcrab_boss/skills/kelp_snare")
-local shell_ring = require("hermitcrab_boss/skills/shell_ring")
-local guard_summon = require("hermitcrab_boss/skills/guard_summon")
+local events = require("hermitcrab_boss/events")
 local final_phase = require("hermitcrab_boss/skills/final_phase")
 local fissure = require("hermitcrab_boss/fissure")
+local guard_summon = require("hermitcrab_boss/skills/guard_summon")
+local kelp_snare = require("hermitcrab_boss/skills/kelp_snare")
+local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
+local shell_ring = require("hermitcrab_boss/skills/shell_ring")
 local tuning = require("hermitcrab_boss/tuning")
 
 local assets =
@@ -40,6 +42,33 @@ AddModulePrefabs(kelp_snare)
 AddModulePrefabs(shell_ring)
 AddModulePrefabs(guard_summon)
 AddModulePrefabs(final_phase)
+
+-- 阶段调度：集中声明"血量阈值 → 阶段技能"。
+-- 新增/调整技能只改这里，无需在技能模块里维护触发逻辑。
+phase_scheduler.RegisterPhase(
+{
+    threshold = tuning.GUARD_SUMMON.PHASE_HEALTH,
+    event = events.GUARD_SUMMON,
+    trigger = function(inst) inst:TriggerGuardSummon() end,
+})
+phase_scheduler.RegisterPhase(
+{
+    threshold = tuning.SHELL_RING.PHASE_HEALTH,
+    event = events.SHELL_PHASE,
+    trigger = function(inst) inst:TriggerShellRing() end,
+})
+phase_scheduler.RegisterPhase(
+{
+    threshold = tuning.KELP_SNARE.PHASE_HEALTH,
+    event = events.KELP_SNARE,
+    trigger = function(inst) inst:TriggerKelpSnare() end,
+})
+phase_scheduler.RegisterPhase(
+{
+    threshold = tuning.FINAL_PHASE.PHASE_HEALTH,
+    event = events.FINAL_PHASE_STARTED,
+    trigger = function(inst) inst:TriggerFinalPhase() end,
+})
 
 local TARGET_MUST_TAGS = { "player" }
 local TARGET_CANT_TAGS = { "playerghost", "INLIMBO" }
@@ -130,13 +159,19 @@ local function fn()
     inst:SetStateGraph("SGhermitcrab_boss")
     inst:SetBrain(brain)
 
-    -- 最终阶段先监听，保证跨过 30% 的高额伤害不会直接触发旧投降结算。
-    final_phase.Attach(inst, encounter.FINISHING_EVENT)
+    -- 挂载顺序有讲究：
+    -- 1. final_phase 先挂，保证 _final_phase_triggered 就位；
+    -- 2. phase_scheduler 其次挂 healthdelta，保证高额伤害跨过 30% 时
+    --    先进入最终阶段（置无敌），encounter 的投降检测看到
+    --    _final_phase_triggered 就不会触发投降；
+    -- 3. encounter 后挂，作为最后的兜底。
+    final_phase.Attach(inst)
+    phase_scheduler.Attach(inst)
     encounter.Attach(inst)
-    fissure.Attach(inst, encounter.FINISHED_EVENT)
-    kelp_snare.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
-    shell_ring.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
-    guard_summon.Attach(inst, encounter.FINISHED_EVENT, final_phase.STARTED_EVENT)
+    fissure.Attach(inst)
+    kelp_snare.Attach(inst)
+    shell_ring.Attach(inst)
+    guard_summon.Attach(inst)
 
     return inst
 end

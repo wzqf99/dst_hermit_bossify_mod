@@ -9,6 +9,8 @@
 
 require("stategraphs/commonstates")
 
+local event_names = require("hermitcrab_boss/events")
+
 local events =
 {
     -- 移动事件（由 locomotor 组件驱动）
@@ -36,14 +38,14 @@ local events =
     end),
 
     -- 投降事件：由 BeginSurrender 推送，进入投降状态
-    EventHandler("hermitboss_surrender", function(inst)
+    EventHandler(event_names.SURRENDER, function(inst)
         if not inst.sg:HasStateTag("surrender") then
             inst.sg:GoToState("surrender")
         end
     end),
 
     -- 90% 血量阶段：用竖立的海带模拟骨刺牢笼 + 螺旋骨刺。
-    EventHandler("hermitboss_kelp_snare", function(inst)
+    EventHandler(event_names.KELP_SNARE, function(inst)
         if not inst._surrendering
             and not inst._final_phase_triggered
             and not inst._encounter_resolved then
@@ -52,7 +54,7 @@ local events =
     end),
 
     -- 75% 血量阶段：强制打断当前动作并使用三叉戟召出贝壳堆。
-    EventHandler("hermitboss_shell_phase", function(inst)
+    EventHandler(event_names.SHELL_PHASE, function(inst)
         if not inst._surrendering
             and not inst._final_phase_triggered
             and not inst._encounter_resolved then
@@ -61,7 +63,7 @@ local events =
     end),
 
     -- 50% 血量阶段：使用星杖动作召唤三只蟹卫。
-    EventHandler("hermitboss_guard_summon", function(inst)
+    EventHandler(event_names.GUARD_SUMMON, function(inst)
         if not inst._surrendering
             and not inst._final_phase_triggered
             and not inst._encounter_resolved then
@@ -70,7 +72,7 @@ local events =
     end),
 
     -- 30% 最终阶段：播放原版搬家时的拍手动画，再由房屋接管战斗。
-    EventHandler("hermitboss_enter_final_phase", function(inst)
+    EventHandler(event_names.ENTER_FINAL_PHASE, function(inst)
         if not inst._surrendering and not inst._encounter_resolved then
             inst.sg:GoToState("enter_final_phase")
         end

@@ -1,3 +1,6 @@
+local events = require("hermitcrab_boss/events")
+local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
+local util = require("hermitcrab_boss/util")
 local tuning = require("hermitcrab_boss/tuning").SHELL_RING
 
 local ShellRing =
@@ -284,42 +287,22 @@ local function Spawn(inst)
     end
 end
 
-local function Begin(inst)
-    if inst._shell_phase_triggered
+-- 由 phase_scheduler 在 75% 血量跨越时触发。
+local function Trigger(inst)
+    if phase_scheduler.IsTriggered(inst, events.SHELL_PHASE)
         or inst._final_phase_triggered
         or inst._encounter_resolved
         or inst._surrendering then
         return
     end
 
-    inst._shell_phase_triggered = true
+    phase_scheduler.MarkTriggered(inst, events.SHELL_PHASE)
     inst.components.combat:CancelAttack()
-    inst:PushEvent("hermitboss_shell_phase")
-end
-
-local function OnHealthDelta(inst, data)
-    if not inst._shell_phase_triggered
-        and not inst._final_phase_triggered
-        and not inst._surrendering
-        and inst.components.health.currenthealth > inst.components.health.minhealth
-        and data ~= nil
-        and data.oldpercent > tuning.PHASE_HEALTH
-        and data.newpercent <= tuning.PHASE_HEALTH then
-        Begin(inst)
-    end
+    inst:PushEvent(events.SHELL_PHASE)
 end
 
 local function RemoveOrbitShells(inst)
-    if inst._orbit_shells == nil then
-        return
-    end
-
-    for _, shell in ipairs(inst._orbit_shells) do
-        if shell:IsValid() then
-            shell:Remove()
-        end
-    end
-    inst._orbit_shells = nil
+    util.RemoveEntityList(inst, "_orbit_shells")
 end
 
 local function OnEncounterFinished(inst, data)
@@ -347,13 +330,13 @@ local function OnEncounterFinished(inst, data)
     end)
 end
 
-function ShellRing.Attach(inst, encounter_finished_event, final_phase_started_event)
+function ShellRing.Attach(inst)
     inst.SpawnShellRing = Spawn
+    inst.TriggerShellRing = Trigger
     inst.TryShellContactHit = TryContactHit
 
-    inst:ListenForEvent("healthdelta", OnHealthDelta)
-    inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)
-    inst:ListenForEvent(final_phase_started_event, RemoveOrbitShells)
+    inst:ListenForEvent(events.ENCOUNTER_FINISHED, OnEncounterFinished)
+    inst:ListenForEvent(events.FINAL_PHASE_STARTED, RemoveOrbitShells)
 end
 
 return ShellRing

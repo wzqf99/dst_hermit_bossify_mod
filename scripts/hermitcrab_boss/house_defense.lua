@@ -1,3 +1,4 @@
+local util = require("hermitcrab_boss/util")
 local tuning = require("hermitcrab_boss/tuning").FINAL_PHASE
 
 local HouseDefense =
@@ -26,13 +27,8 @@ local function IsActive(inst)
         and not inst._encounter_resolved
 end
 
-local function CancelTask(owner, name)
-    local task = owner[name]
-    if task ~= nil then
-        task:Cancel()
-        owner[name] = nil
-    end
-end
+-- 取消任务：统一走 util（nil 安全）。
+local CancelTask = util.CancelTask
 
 local function IsLivingIslandPlayer(inst, player)
     if player == nil
@@ -108,21 +104,14 @@ local function FindKnightSpawnPoint(house)
 end
 
 -- 从三个裂隙处召唤最终阶段单位：1 蟹骑士 + 2 蟹卫。
--- 裂隙位置来自 fissure 模块 90% 时打开的 inst._opened_fissures
+-- 裂隙位置来自 fissure 模块 90% 时打开的裂隙
 --（原版奶奶岛固定 3 个堵住裂缝，打开后即成为三个生成点）。
+-- 通过 inst:GetOpenedFissurePoints() 接口获取，避免与 fissure 内部字段耦合；
 -- 裂隙不足时兜底：在房子附近找可通过点补足。
 local function SpawnFissureMinions(inst, house)
-    local points = {}
-    if inst._opened_fissures ~= nil then
-        for _, fissure in ipairs(inst._opened_fissures) do
-            if fissure ~= nil and fissure:IsValid() then
-                local x, _, z = fissure.Transform:GetWorldPosition()
-                if TheWorld.Map:IsPassableAtPoint(x, 0, z) then
-                    table.insert(points, Vector3(x, 0, z))
-                end
-            end
-        end
-    end
+    local points = inst.GetOpenedFissurePoints ~= nil
+        and inst:GetOpenedFissurePoints()
+        or {}
 
     local total = tuning.FINAL_KNIGHT_COUNT + tuning.FINAL_GUARD_COUNT
     while #points < total do
@@ -166,13 +155,7 @@ local function SpawnFissureMinions(inst, house)
 end
 
 local function RemoveFinalMinions(inst)
-    local minions = inst._final_minions or {}
-    inst._final_minions = nil
-    for _, minion in ipairs(minions) do
-        if minion ~= nil and minion:IsValid() then
-            minion:Remove()
-        end
-    end
+    util.RemoveEntityList(inst, "_final_minions")
 end
 
 local function RemoveMissile(inst, missile, onremove)

@@ -1,9 +1,10 @@
+local events = require("hermitcrab_boss/events")
 local tuning = require("hermitcrab_boss/tuning").ENCOUNTER
 
 local Encounter =
 {
-    FINISHING_EVENT = "hermitboss_encounter_finishing",
-    FINISHED_EVENT = "hermitboss_encounter_finished",
+    FINISHING_EVENT = events.ENCOUNTER_FINISHING,
+    FINISHED_EVENT = events.ENCOUNTER_FINISHED,
     PREFABS =
     {
         "hermit_pearl",
@@ -47,7 +48,7 @@ local function BeginSurrender(inst)
     inst.components.health:SetInvincible(true)
     inst.components.combat:SetTarget(nil)
     inst.components.combat:CancelAttack()
-    inst:PushEvent("hermitboss_surrender")
+    inst:PushEvent(events.SURRENDER)
 end
 
 local function OnHealthDelta(inst)
