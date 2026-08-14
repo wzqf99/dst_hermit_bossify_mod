@@ -14,7 +14,7 @@ local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
 local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
 local TUNING = require("hermitcrab_boss/tuning")
 
--- 从模组配置读取 Boss 生命值；配置缺失或非法时回退到 tuning 默认值（6000）。
+-- 从模组配置读取 Boss 生命值；配置缺失或非法时回退到 tuning 默认值（5200）。
 local configured_health = GetModConfigData("boss_health")
 if type(configured_health) == "number" and configured_health > 0 then
     TUNING.MAX_HEALTH = configured_health

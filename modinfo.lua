@@ -17,14 +17,14 @@ configuration_options =
         hover = "设置寄居蟹隐士 Boss 的最大生命值。",
         options =
         {
-            { description = "6000（默认）", data = 6000 },
-            { description = "5200（原版）", data = 5200 },
             { description = "3000（简单）", data = 3000 },
+            { description = "5200（默认）", data = 5200 },
+            { description = "6000", data = 6000 },
             { description = "9000（困难）", data = 9000 },
             { description = "12000（极难）", data = 12000 },
             { description = "20000（地狱）", data = 20000 },
         },
-        default = 6000,
+        default = 5200,
     },
     {
         name = "shell_contacts",

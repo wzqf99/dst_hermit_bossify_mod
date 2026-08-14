@@ -2,7 +2,7 @@ local BASE_DAMAGE = 40
 
 return
 {
-    MAX_HEALTH = 6000,
+    MAX_HEALTH = 5200,
     DAMAGE = BASE_DAMAGE,
     ATTACK_PERIOD = 2,
     TARGET_DISTANCE = 20,
