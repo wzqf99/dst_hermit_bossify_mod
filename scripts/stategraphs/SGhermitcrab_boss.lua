@@ -16,7 +16,9 @@ local events =
 
     -- 攻击事件：进入 attack 状态，记录目标
     EventHandler("doattack", function(inst, data)
-        if not inst._surrendering and not inst.sg:HasStateTag("busy") then
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst.sg:HasStateTag("busy") then
             inst.sg:GoToState(
                 "attack",
                 data ~= nil and data.target or inst.components.combat.target
@@ -26,7 +28,9 @@ local events =
 
     -- 受伤事件：进入 hit 状态
     EventHandler("attacked", function(inst)
-        if not inst._surrendering and not inst.sg:HasStateTag("busy") then
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst.sg:HasStateTag("busy") then
             inst.sg:GoToState("hit")
         end
     end),
@@ -38,17 +42,37 @@ local events =
         end
     end),
 
+    -- 90% 血量阶段：用竖立的海带模拟骨刺牢笼 + 螺旋骨刺。
+    EventHandler("hermitboss_kelp_snare", function(inst)
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
+            inst.sg:GoToState("kelp_snare")
+        end
+    end),
+
     -- 75% 血量阶段：强制打断当前动作并使用三叉戟召出贝壳堆。
     EventHandler("hermitboss_shell_phase", function(inst)
-        if not inst._surrendering and not inst._encounter_resolved then
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
             inst.sg:GoToState("trident_cast")
         end
     end),
 
     -- 50% 血量阶段：使用星杖动作召唤三只蟹卫。
     EventHandler("hermitboss_guard_summon", function(inst)
-        if not inst._surrendering and not inst._encounter_resolved then
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
             inst.sg:GoToState("staff_cast")
+        end
+    end),
+
+    -- 30% 最终阶段：播放原版搬家时的拍手动画，再由房屋接管战斗。
+    EventHandler("hermitboss_enter_final_phase", function(inst)
+        if not inst._surrendering and not inst._encounter_resolved then
+            inst.sg:GoToState("enter_final_phase")
         end
     end),
 }
@@ -105,6 +129,65 @@ local states =
     },
 
     -- ============================
+    -- 90% 血量：海带骨刺（骨刺牢笼 + 螺旋骨刺）
+    -- 复用星杖施法动画作为抬手动作，在帧上释放海带刺。
+    -- ============================
+    State
+    {
+        name = "kelp_snare",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("staff_pre")
+            inst.AnimState:PushAnimation("staff", false)
+
+            -- 动画资源异常时也能自动退出，不会永久卡在施法中。
+            inst.sg:SetTimeout(2.25)
+        end,
+
+        timeline =
+        {
+            TimeEvent(8 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("dontstarve/common/staffteleport")
+            end),
+            TimeEvent(14 * FRAMES, function(inst)
+                inst:SpawnKelpSnare()
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:SpawnKelpSnare()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering
+                and not inst._final_phase_triggered
+                and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
+    },
+
+    -- ============================
     -- 75% 血量：三叉戟喷水柱召唤
     -- 使用原版三叉戟的 strum_pre / strum 动画和触发帧。
     -- ============================
@@ -155,7 +238,9 @@ local states =
         end,
 
         onexit = function(inst)
-            if not inst._surrendering and not inst._encounter_resolved then
+            if not inst._surrendering
+                and not inst._final_phase_triggered
+                and not inst._encounter_resolved then
                 inst.components.health:SetInvincible(false)
             end
         end,
@@ -212,7 +297,9 @@ local states =
         end,
 
         onexit = function(inst)
-            if not inst._surrendering and not inst._encounter_resolved then
+            if not inst._surrendering
+                and not inst._final_phase_triggered
+                and not inst._encounter_resolved then
                 inst.components.health:SetInvincible(false)
             end
         end,
@@ -221,6 +308,47 @@ local states =
     -- ============================
     -- 受击
     -- ============================
+    State
+    {
+        name = "enter_final_phase",
+        tags = { "busy", "noattack", "playing", "finalphase" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            -- 原版搬家水遁实际使用 idle_clack 动画配合 hermitcrab_fx_small。
+            inst.AnimState:PlayAnimation("idle_clack_pre")
+            inst.AnimState:PushAnimation("idle_clack_loop", false)
+            inst.sg:SetTimeout(2.5)
+        end,
+
+        timeline =
+        {
+            TimeEvent(13 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+            TimeEvent(29 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst:EnterHouseDefense()
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:EnterHouseDefense()
+        end,
+    },
+
     State
     {
         name = "hit",

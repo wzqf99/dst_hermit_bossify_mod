@@ -5,11 +5,28 @@
 
 local STRINGS = GLOBAL.STRINGS
 local SpawnPrefab = GLOBAL.SpawnPrefab
+local require = GLOBAL.require
 
 -- 自定义物品和生物 prefab 名称
 local TOKEN_PREFAB = "hermitcrab_boss_token"
 local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
+local KELP_SPIKE_PREFAB = "hermitcrab_kelp_spike"
+local WEB_GROUND_PREFAB = "hermitcrab_web_ground"
+local FINAL_PHASE = require("hermitcrab_boss/skills/final_phase")
+local TUNING = require("hermitcrab_boss/tuning")
+
+-- 从模组配置读取 Boss 生命值；配置缺失或非法时回退到 tuning 默认值（5200）。
+local configured_health = GetModConfigData("boss_health")
+if type(configured_health) == "number" and configured_health > 0 then
+    TUNING.MAX_HEALTH = configured_health
+end
+
+-- 从模组配置读取贝壳碰撞次数；配置缺失或非法时回退到 tuning 默认值（3）。
+local configured_shell_contacts = GetModConfigData("shell_contacts")
+if type(configured_shell_contacts) == "number" and configured_shell_contacts > 0 then
+    TUNING.SHELL_RING.MAX_CONTACTS = configured_shell_contacts
+end
 
 -- 注册让游戏加载的 prefab 文件（对应 scripts/prefabs/ 下的同名文件）
 PrefabFiles =
@@ -17,7 +34,12 @@ PrefabFiles =
     TOKEN_PREFAB,
     BOSS_PREFAB,
     BOSS_SHELL_PREFAB,
+    KELP_SPIKE_PREFAB,
+    WEB_GROUND_PREFAB,
 }
+
+-- 房屋默认仍不可攻击；最终阶段只激活本场关联的原版房屋。
+FINAL_PHASE.RegisterHousePostInits(AddPrefabPostInit)
 
 -- 物品和生物的名称（鼠标悬停时显示）
 STRINGS.NAMES.HERMITCRAB_BOSS_TOKEN = "帝王蟹的信物"
@@ -192,3 +214,35 @@ AddPrefabPostInit("hermitcrab", function(inst)
         end
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- 调试指令：c_sc()
+-- 让寄居蟹隐士 Boss 立即释放海带骨刺技能（骨刺牢笼 + 螺旋骨刺），方便测试。
+-- 用法：游戏内按 ~ 打开控制台，输入 c_sc() 即可反复触发。
+-- ---------------------------------------------------------------------------
+GLOBAL.c_sc = function()
+    if GLOBAL.TheWorld == nil then
+        print("[hermit_bossify] c_sc: 世界未加载")
+        return
+    end
+
+    -- 客户端输入时转发到服务端执行
+    if not GLOBAL.TheWorld.ismastersim then
+        GLOBAL.c_remote("c_sc()")
+        return
+    end
+
+    local boss = GLOBAL.TheSim:FindFirstEntityWithTag("hermitcrab_boss")
+    if boss == nil then
+        print("[hermit_bossify] c_sc: 未找到寄居蟹隐士 Boss，请先触发 Boss 战")
+        return
+    end
+
+    -- 清除已触发标志，允许反复测试
+    boss._kelp_snare_triggered = nil
+    boss._kelp_snare_released = nil
+
+    -- 触发完整连招流程（先铺蛛网，再施法释放海带骨刺）
+    boss:CastKelpSnare()
+    print("[hermit_bossify] c_sc: 已触发铺蛛网 + 海带骨刺连招")
+end

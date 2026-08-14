@@ -2,6 +2,7 @@ local tuning = require("hermitcrab_boss/tuning").ENCOUNTER
 
 local Encounter =
 {
+    FINISHING_EVENT = "hermitboss_encounter_finishing",
     FINISHED_EVENT = "hermitboss_encounter_finished",
     PREFABS =
     {
@@ -50,7 +51,8 @@ local function BeginSurrender(inst)
 end
 
 local function OnHealthDelta(inst)
-    if inst.components.health.currenthealth <= inst.components.health.minhealth then
+    if not inst._final_phase_triggered
+        and inst.components.health.currenthealth <= inst.components.health.minhealth then
         BeginSurrender(inst)
     end
 end
@@ -76,6 +78,9 @@ local function Finish(inst, victory, already_removing)
         inst._watch_task:Cancel()
         inst._watch_task = nil
     end
+
+    -- 最终阶段需要先恢复房屋并释放真实寄居蟹，后续奖励和归还逻辑才能沿用。
+    inst:PushEvent(Encounter.FINISHING_EVENT, { victory = victory })
 
     local hermit = inst._encounter_hermit
     if hermit ~= nil then

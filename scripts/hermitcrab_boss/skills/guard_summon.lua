@@ -6,6 +6,7 @@ local GuardSummon =
     PREFABS =
     {
         "crabking_mob",
+        "hermitcrab_fx_small",
     },
 }
 
@@ -52,7 +53,10 @@ local function FindSpawnPoints(inst)
 end
 
 local function SpawnGuards(inst)
-    if inst._guard_summon_released or inst._encounter_resolved or inst._surrendering then
+    if inst._guard_summon_released
+        or inst._final_phase_triggered
+        or inst._encounter_resolved
+        or inst._surrendering then
         return
     end
 
@@ -64,6 +68,12 @@ local function SpawnGuards(inst)
         or nil
 
     for _, point in ipairs(FindSpawnPoints(inst)) do
+        -- 水遁特效：蟹卫从水遁中钻出（复用原版寄居蟹搬家水遁特效）
+        local fx = SpawnPrefab("hermitcrab_fx_small")
+        if fx ~= nil then
+            fx.Transform:SetPosition(point:Get())
+        end
+
         local guard = SpawnPrefab("crabking_mob")
         if guard ~= nil then
             guard.Transform:SetPosition(point:Get())
@@ -96,7 +106,10 @@ local function OnEncounterFinished(inst)
 end
 
 local function Begin(inst)
-    if inst._guard_summon_triggered or inst._encounter_resolved or inst._surrendering then
+    if inst._guard_summon_triggered
+        or inst._final_phase_triggered
+        or inst._encounter_resolved
+        or inst._surrendering then
         return
     end
 
@@ -107,6 +120,7 @@ end
 
 local function OnHealthDelta(inst, data)
     if not inst._guard_summon_triggered
+        and not inst._final_phase_triggered
         and not inst._surrendering
         and inst.components.health.currenthealth > inst.components.health.minhealth
         and data ~= nil
@@ -116,11 +130,12 @@ local function OnHealthDelta(inst, data)
     end
 end
 
-function GuardSummon.Attach(inst, encounter_finished_event)
+function GuardSummon.Attach(inst, encounter_finished_event, final_phase_started_event)
     inst.SpawnGuards = SpawnGuards
 
     inst:ListenForEvent("healthdelta", OnHealthDelta)
     inst:ListenForEvent(encounter_finished_event, OnEncounterFinished)
+    inst:ListenForEvent(final_phase_started_event, RemoveGuards)
 end
 
 return GuardSummon
