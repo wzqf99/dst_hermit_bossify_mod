@@ -1,10 +1,10 @@
 -- ============================================================================
 -- Boss 动画状态机（Stategraph）
 -- 状态流程：
---   idle ←→ attack / hit / walk / run
+--   intro → idle ←→ attack / hit / walk / run
 --   idle → surrender → FinishEncounter(true)
--- 攻击使用标准持武器动作，75% 血量时使用三叉戟拨弦动作，
--- 受伤和投降使用 "hit" 动画。
+-- 开战衔接使用原版 idle_clack 拍手钳动作（pre → loop → pst），
+-- 结束衔接使用原版被打晕的 idle_groggy 待机（pre → loop）。
 -- ============================================================================
 
 require("stategraphs/commonstates")
@@ -99,6 +99,88 @@ local states =
         onenter = function(inst)
             inst.components.locomotor:StopMoving()
             inst.AnimState:PlayAnimation("idle_loop", true)
+        end,
+    },
+
+    -- ============================
+    -- 开战仪式（Boss 生成后进入的第一个状态）
+    -- 使用原版 idle_clack 拍手钳动作作为开战衔接：
+    -- pre → loop（循环拍手，展示两轮）→ intro_pst → idle
+    -- ============================
+    State
+    {
+        name = "intro",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+
+            inst.AnimState:PlayAnimation("idle_clack_pre")
+            inst.AnimState:PushAnimation("idle_clack_loop", true)
+
+            -- 动画资源异常时也能自动退出，不会卡在开战动画里
+            inst.sg:SetTimeout(5)
+        end,
+
+        timeline =
+        {
+            -- 每次拍钳的节拍音效（idle_clack_loop 为 31 帧一轮，每轮拍两下）
+            TimeEvent(13 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+            TimeEvent(29 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+            TimeEvent((13 + 31) * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+            TimeEvent((29 + 31) * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/hermit/clap")
+            end),
+        },
+
+        events =
+        {
+            -- pre 播完进入 loop 循环拍手后，展示两轮再进入收尾
+            EventHandler("animover", function(inst)
+                if not inst.sg.statemem.clack_loop_started then
+                    inst.sg.statemem.clack_loop_started = true
+                    inst.sg:SetTimeout(2 * (31 * FRAMES))
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst.sg:GoToState("intro_pst")
+        end,
+    },
+
+    -- ============================
+    -- 开战仪式收尾（clack 结束动作，回到待机）
+    -- ============================
+    State
+    {
+        name = "intro_pst",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.AnimState:PlayAnimation("idle_clack_pst")
+            inst.sg:SetTimeout(2)
+        end,
+
+        events =
+        {
+            EventHandler("animover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst.sg:GoToState("idle")
         end,
     },
 
@@ -382,6 +464,8 @@ local states =
 
     -- ============================
     -- 投降（打到 1 血时）
+    -- 结束衔接：使用原版被打晕的待机动作（idle_groggy_pre → idle_groggy 循环），
+    -- 展示一段眩晕脱力后再结束战斗。
     -- noattack 标签：防止在投降动画中触发攻击
     -- ============================
     State
@@ -392,17 +476,20 @@ local states =
         onenter = function(inst)
             inst.components.locomotor:StopMoving()
             inst.Physics:Stop()
-            inst.AnimState:PlayAnimation("hit")
+            inst.components.combat:CancelAttack()
 
-            -- 1 秒兜底超时：防止动画卡住导致战斗无法结束
-            inst.sg:SetTimeout(1)
+            inst.AnimState:PlayAnimation("idle_groggy_pre")
+            inst.AnimState:PushAnimation("idle_groggy", true)
+
+            -- 兜底超时：动画资源异常时也能结束战斗
+            inst.sg:SetTimeout(4)
         end,
 
         events =
         {
-            -- 动画播放完毕 → 胜利结束
+            -- pre 播完进入 groggy 眩晕循环后，再展示一会儿再结束
             EventHandler("animover", function(inst)
-                inst:FinishEncounter(true)
+                inst.sg:SetTimeout(1.5)
             end),
         },
 
@@ -429,4 +516,4 @@ CommonStates.AddRunStates(states, nil,
     stoprun = "run_pst",
 })
 
-return StateGraph("hermitcrab_boss", states, events, "idle")
+return StateGraph("hermitcrab_boss", states, events, "intro")

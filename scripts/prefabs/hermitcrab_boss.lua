@@ -21,6 +21,10 @@ local assets =
     Asset("ANIM", "anim/player_hermitcrab_idle.zip"),
     Asset("ANIM", "anim/player_hermitcrab_walk.zip"),
     Asset("ANIM", "anim/player_hermitcrab_look.zip"),
+    -- 结束衔接（surrender）使用的 idle_groggy 系列动画，原版在玩家专属包里，
+    -- 需显式声明才会随 Boss 加载（player_idles.zip 是全局常驻的，无需声明）。
+    Asset("ANIM", "anim/player_idles_groggy.zip"),
+    Asset("ANIM", "anim/player_groggy.zip"),
     Asset("ANIM", "anim/hermitcrab_build.zip"),
     Asset("ANIM", "anim/swap_trident.zip"),
     Asset("SOUND", "sound/sfx.fsb"),
