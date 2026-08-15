@@ -362,7 +362,7 @@ end
 -- ---------------------------------------------------------------------------
 local ScheduleBottleVolley
 
-local function ExplodeBottle(bottle)
+local function ExplodeBottle(bottle, attacker)
     if bottle == nil or not bottle:IsValid() then
         return
     end
@@ -382,16 +382,19 @@ local function ExplodeBottle(bottle)
             and not player:HasTag("playerghost")
             and not player:IsInLimbo()
             and player.components.health ~= nil
-            and not player.components.health:IsDead() then
-            player.components.health:DoDelta(
-                -tuning.BOTTLE_DAMAGE,
-                nil,
-                nil,
-                nil,
-                nil,
-                nil,
-                nil
-            )
+            and not player.components.health:IsDead()
+            and player.components.combat ~= nil then
+            if attacker ~= nil and attacker:IsValid() then
+                -- 伤害归属 Boss，保证仇恨与击杀统计正确。
+                player.components.combat:GetAttacked(
+                    attacker,
+                    tuning.BOTTLE_DAMAGE,
+                    bottle
+                )
+            else
+                -- Boss 已失效时的兜底，避免因缺失攻击者而报错。
+                player.components.health:DoDelta(-tuning.BOTTLE_DAMAGE)
+            end
         end
     end
 
@@ -424,13 +427,14 @@ local function SpawnThrownBottle(inst, house, aim)
     local projectile = bottle.components.complexprojectile
     if projectile ~= nil then
         projectile:SetOnHit(function(proj, attacker, target)
-            ExplodeBottle(proj)
+            ExplodeBottle(proj, attacker)
         end)
         projectile:SetHorizontalSpeedForDistance(
             math.sqrt((aim.x - sx) * (aim.x - sx) + (aim.z - sz) * (aim.z - sz)),
             tuning.BOTTLE_SPEED
         )
-        projectile:Launch(Vector3(aim.x, 0, aim.z), nil)
+        -- 将 Boss 作为攻击者传入，落地爆炸的伤害正确归属到 Boss。
+        projectile:Launch(Vector3(aim.x, 0, aim.z), inst)
         -- 关闭碰撞：直飞目标落点，不被树/建筑等障碍物挡下
         if bottle.Physics ~= nil then
             bottle.Physics:SetCollides(false)
