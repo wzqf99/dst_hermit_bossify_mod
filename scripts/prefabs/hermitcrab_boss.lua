@@ -1,4 +1,5 @@
 -- Boss 实体：只负责外观、基础战斗组件和功能模块装配。
+local boss_talk = require("hermitcrab_boss/boss_talk")
 local brain = require("brains/hermitcrab_bossbrain")
 local encounter = require("hermitcrab_boss/encounter")
 local events = require("hermitcrab_boss/events")
@@ -118,6 +119,9 @@ local function ConfigureAppearance(inst)
     inst.AnimState:Show("HAIR")
     inst.AnimState:Show("HEAD")
     inst.AnimState:Hide("HEAD_HAT")
+
+    -- 头顶冒字组件（客户端也需要，故放在 pristine 阶段配置）
+    boss_talk.Configure(inst)
 end
 
 local function ConfigureServerComponents(inst)
@@ -187,6 +191,8 @@ local function fn()
     kelp_spiral.Attach(inst)
     shell_ring.Attach(inst)
     guard_summon.Attach(inst)
+    -- 血线台词最后挂：只负责说话，不改变战斗状态
+    boss_talk.Attach(inst)
 
     return inst
 end

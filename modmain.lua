@@ -47,6 +47,36 @@ FINAL_PHASE.RegisterHousePostInits(AddPrefabPostInit)
 STRINGS.NAMES.HERMITCRAB_BOSS_TOKEN = "帝王蟹的信物"
 STRINGS.NAMES.HERMITCRAB_BOSS = "寄居蟹隐士"
 
+-- ---------------------------------------------------------------------------
+-- Boss 血线台词（头顶冒字）：血量跨过 90% / 70% / 50% / 30% 时随机说一句。
+-- 键必须是字符串（如 "90"）：服务器端 npc_talker:Chatter 传入的路径是
+-- "HERMITCRAB_BOSS_TALK.90"，服务器校验与客户端解析均用 split 后的字符串 key
+-- 查表，数字 key 会查不到台词。
+-- ---------------------------------------------------------------------------
+STRINGS.HERMITCRAB_BOSS_TALK =
+{
+    ["90"] =
+    {
+        "哼，原来是你！那就陪你玩玩！",
+        "想要珍珠？先过我这一关！",
+    },
+    ["70"] =
+    {
+        "我的贝壳可硬得很，你打不破的！",
+        "这点小伤，还伤不到我！",
+    },
+    ["50"] =
+    {
+        "大海的力量，可不是你能抵挡的！",
+        "海带们，缠住他们！",
+    },
+    ["30"] =
+    {
+        "看来得回屋子里避一避了……",
+        "别以为这样就赢了，我还没输！",
+    },
+}
+
 -- 为所有角色添加检查描述语（右键查看时的文字）
 for _, character_strings in pairs(STRINGS.CHARACTERS) do
     if type(character_strings) == "table" and type(character_strings.DESCRIBE) == "table" then
