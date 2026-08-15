@@ -41,7 +41,7 @@ local VISUAL_VARIATIONS =
     { scale = 0.60, radius =  0.06, height = -0.12, bob = 1.15, phase = 5.8, wobble = 0.045, wobble_speed = 1.05, radial_speed = 1.10, spin =  5, follow = 8.5 },
 }
 
-local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR", "crabking_ally" }
+local TARGET_CANT_TAGS = { "playerghost", "INLIMBO", "FX", "DECOR", "crabking_ally", "hermithouse" }
 local TARGET_ONEOF_TAGS = { "_combat", "HAMMER_workable" }
 local SINGING_SHELL_PREFABS =
 {
@@ -103,6 +103,19 @@ local function BreakShell(inst)
     inst:Remove()
 end
 
+-- 切换环绕锚点（最终阶段从 Boss 切到房屋）。
+-- 切换时把跟随插值位置重置到当前坐标，避免长距离跳变。
+local function SetOrbitAnchor(inst, anchor)
+    if anchor == nil or not anchor:IsValid() or anchor == inst._anchor then
+        return
+    end
+
+    inst._anchor = anchor
+    local x, _, z = inst.Transform:GetWorldPosition()
+    inst._follow_x = x
+    inst._follow_z = z
+end
+
 local function RecordContact(inst)
     inst._contact_count = inst._contact_count + 1
     if inst._contact_count >= tuning.MAX_CONTACTS then
@@ -123,14 +136,18 @@ end
 
 local function HandleNewContact(inst, target)
     local boss = inst._boss
-    if target == boss then
+    -- 环绕锚点（最终阶段为房屋）不算可接触目标，防止贝壳把房屋撞毁。
+    if target == boss or target == inst._anchor then
         return false
     end
 
     -- 墙也有战斗组件，因此必须先按建筑处理。
     if IsDestructibleStructure(target) then
-        target.components.workable:Destroy(boss)
-    elseif boss.TryShellContactHit == nil
+        if boss ~= nil then
+            target.components.workable:Destroy(boss)
+        end
+    elseif boss == nil
+        or boss.TryShellContactHit == nil
         or not boss:TryShellContactHit(inst, target) then
         return false
     end
@@ -177,7 +194,22 @@ end
 local function UpdatePosition(inst)
     local boss = inst._boss
     if boss == nil or not boss:IsValid() or boss._encounter_resolved then
-        inst:Remove()
+        BreakShell(inst)
+        return
+    end
+
+    -- 最终阶段：把轨道中心从 Boss 切到房屋。
+    -- 房屋引用（boss._final_house）出现即生效，不依赖事件时序。
+    if inst._anchor == boss and boss._final_phase_triggered then
+        local house = boss._final_house
+        if house ~= nil and house:IsValid() then
+            SetOrbitAnchor(inst, house)
+        end
+    end
+
+    local anchor = inst._anchor
+    if anchor == nil or not anchor:IsValid() then
+        BreakShell(inst)
         return
     end
 
@@ -188,7 +220,7 @@ local function UpdatePosition(inst)
     local angle = inst._base_angle
         + orbit_elapsed * ORBIT_ANGULAR_SPEED
         + variation.wobble * math.sin(orbit_elapsed * variation.wobble_speed + variation.phase)
-    local boss_x, boss_y, boss_z = boss.Transform:GetWorldPosition()
+    local boss_x, boss_y, boss_z = anchor.Transform:GetWorldPosition()
     local orbit_radius = ORBIT_RADIUS
         + variation.radius
         + 0.1 * math.sin(orbit_elapsed * variation.radial_speed + variation.phase)
@@ -242,6 +274,7 @@ local function SetBoss(inst, boss, index, count, start_angle)
     end
 
     inst._boss = boss
+    inst._anchor = boss
     inst._base_angle = start_angle + (index - 1) * TWOPI / count
     inst._start_time = GetTime()
     inst._next_contact_check = inst._start_time
@@ -255,7 +288,7 @@ local function SetBoss(inst, boss, index, count, start_angle)
 
     inst._on_boss_removed = function()
         if inst:IsValid() then
-            inst:Remove()
+            BreakShell(inst)
         end
     end
     inst:ListenForEvent("onremove", inst._on_boss_removed, boss)
@@ -302,6 +335,8 @@ local function fn()
     inst:AddComponent("lootdropper")
 
     inst.SetBoss = SetBoss
+    inst.SetOrbitAnchor = SetOrbitAnchor
+    inst.BreakShell = BreakShell
     inst.OnRemoveEntity = OnRemoveEntity
 
     return inst

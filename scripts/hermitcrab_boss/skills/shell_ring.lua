@@ -1,6 +1,5 @@
 local events = require("hermitcrab_boss/events")
 local phase_scheduler = require("hermitcrab_boss/phase_scheduler")
-local util = require("hermitcrab_boss/util")
 local tuning = require("hermitcrab_boss/tuning").SHELL_RING
 
 local ShellRing =
@@ -301,12 +300,21 @@ local function Trigger(inst)
     inst:PushEvent(events.SHELL_PHASE)
 end
 
-local function RemoveOrbitShells(inst)
-    util.RemoveEntityList(inst, "_orbit_shells")
+-- 贝壳以"爆壳"收场：战斗结束不再静默删除，统一走破碎掉落逻辑（掉歌唱贝壳）。
+local function BreakOrbitShells(inst)
+    local shells = inst._orbit_shells
+    inst._orbit_shells = nil
+    if shells ~= nil then
+        for _, shell in ipairs(shells) do
+            if shell ~= nil and shell:IsValid() and shell.BreakShell ~= nil then
+                shell:BreakShell()
+            end
+        end
+    end
 end
 
 local function OnEncounterFinished(inst, data)
-    RemoveOrbitShells(inst)
+    BreakOrbitShells(inst)
     inst._shell_hit_cooldowns = nil
 
     if (inst._salvaged_shell_cluster_count or 0) <= 0 then
@@ -336,7 +344,8 @@ function ShellRing.Attach(inst)
     inst.TryShellContactHit = TryContactHit
 
     inst:ListenForEvent(events.ENCOUNTER_FINISHED, OnEncounterFinished)
-    inst:ListenForEvent(events.FINAL_PHASE_STARTED, RemoveOrbitShells)
+    -- 最终阶段不再销毁贝壳：贝壳在 UpdatePosition 里检测到 boss._final_house 后
+    -- 自行把环绕中心从 Boss 切到房屋，战斗结束由 BreakOrbitShells 统一爆壳收场。
 end
 
 return ShellRing
