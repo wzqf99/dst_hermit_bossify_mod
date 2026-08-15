@@ -69,6 +69,15 @@ local events =
         end
     end),
 
+    -- 贝壳聚拢轰炸：贝壳环后每 15 秒循环，进入施法状态（贝壳头顶蓄力后砸落）。
+    EventHandler(event_names.SHELL_BOMBARD, function(inst)
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
+            inst.sg:GoToState("shell_bombard_cast")
+        end
+    end),
+
     -- 90% 血量阶段：使用星杖动作召唤三只蟹卫（从裂隙处钻出）。
     EventHandler(event_names.GUARD_SUMMON, function(inst)
         if not inst._surrendering
@@ -328,6 +337,66 @@ local states =
 
         ontimeout = function(inst)
             inst:SpawnShellRing()
+            inst.sg:GoToState("idle")
+        end,
+
+        onexit = function(inst)
+            if not inst._surrendering
+                and not inst._final_phase_triggered
+                and not inst._encounter_resolved then
+                inst.components.health:SetInvincible(false)
+            end
+        end,
+    },
+
+    -- ============================
+    -- 贝壳聚拢轰炸：贝壳环后每 15 秒循环。
+    -- 施法前摇复用三叉戟 strum 动画；实际聚拢/旋转/投掷由 shell_bombard 模块
+    -- 在动画帧启动，贝壳实体在此期间被技能接管（脱离原环绕轨道）。
+    -- ============================
+    State
+    {
+        name = "shell_bombard_cast",
+        tags = { "busy", "noattack", "playing" },
+
+        onenter = function(inst)
+            inst.components.locomotor:StopMoving()
+            inst.Physics:Stop()
+            inst.components.combat:CancelAttack()
+            inst.components.health:SetInvincible(true)
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("strum_pre")
+            inst.AnimState:PushAnimation("strum", false)
+
+            -- 动画资源异常时也能自动退出，不会永久卡在施法中。
+            inst.sg:SetTimeout(2.25)
+        end,
+
+        timeline =
+        {
+            TimeEvent(23 * FRAMES, function(inst)
+                inst.SoundEmitter:PlaySound("hookline_2/characters/trident_attack")
+            end),
+            TimeEvent(28 * FRAMES, function(inst)
+                inst:CastShellBombard()
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animqueueover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst:CastShellBombard()
             inst.sg:GoToState("idle")
         end,
 

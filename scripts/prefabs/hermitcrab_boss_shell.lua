@@ -198,6 +198,12 @@ local function UpdatePosition(inst)
         return
     end
 
+    -- 被技能接管时（聚拢/旋转/投掷/返回），位置由技能模块逐帧控制，
+    -- 这里跳过自身轨道计算，但仍保留接触检测由技能模块决定是否调用。
+    if inst._control_mode ~= nil and inst._control_mode ~= "ORBIT" then
+        return
+    end
+
     -- 最终阶段：把轨道中心从 Boss 切到房屋。
     -- 房屋引用（boss._final_house）出现即生效，不依赖事件时序。
     if inst._anchor == boss and boss._final_phase_triggered then
@@ -275,6 +281,8 @@ local function SetBoss(inst, boss, index, count, start_angle)
 
     inst._boss = boss
     inst._anchor = boss
+    inst._orbit_index = index
+    inst._control_mode = "ORBIT"
     inst._base_angle = start_angle + (index - 1) * TWOPI / count
     inst._start_time = GetTime()
     inst._next_contact_check = inst._start_time
@@ -294,6 +302,41 @@ local function SetBoss(inst, boss, index, count, start_angle)
     inst:ListenForEvent("onremove", inst._on_boss_removed, boss)
 
     inst._move_task = inst:DoPeriodicTask(UPDATE_PERIOD, UpdatePosition, 0)
+end
+
+-- ---------------------------------------------------------------------------
+-- 轨道控制接管 / 交还（供"贝壳聚拢轰炸"技能使用）。
+-- 技能期间由技能模块逐帧 SetPosition 控制贝壳位置；技能结束后交还轨道，
+-- 按当前存活贝壳数量重新计算 base_angle，恢复均匀环绕。
+-- ---------------------------------------------------------------------------
+local function SetControlMode(inst, mode)
+    inst._control_mode = mode
+end
+
+-- 技能结束后重新分配轨道角度：以当前存活贝壳数量均匀分布。
+-- @param count      存活贝壳总数
+-- @param start_angle 起始角度（弧度）
+local function RecalcOrbitAngle(inst, count, start_angle)
+    if count == nil or count <= 0 then
+        return
+    end
+
+    inst._control_mode = "ORBIT"
+    inst._anchor = inst._boss
+    inst._base_angle = start_angle
+        + ((inst._orbit_index or 1) - 1) * TWOPI / count
+
+    -- 重置跟随插值与起飞起点到当前实际位置：
+    -- 1. 跟随插值起点复位，避免长距离跳变（与 SetOrbitAnchor 一致）；
+    -- 2. 起飞起点复位到当前坐标，让贝壳从当前位置平滑飞回轨道，
+    --    而不是瞬移回最初的水柱位置（launch 分支用 _start_* 做插值起点）。
+    local x, y, z = inst.Transform:GetWorldPosition()
+    inst._follow_x = x
+    inst._follow_z = z
+    inst._start_x = x
+    inst._start_y = y
+    inst._start_z = z
+    inst._start_time = GetTime()
 end
 
 local function fn()
@@ -336,6 +379,8 @@ local function fn()
 
     inst.SetBoss = SetBoss
     inst.SetOrbitAnchor = SetOrbitAnchor
+    inst.SetControlMode = SetControlMode
+    inst.RecalcOrbitAngle = RecalcOrbitAngle
     inst.BreakShell = BreakShell
     inst.OnRemoveEntity = OnRemoveEntity
 

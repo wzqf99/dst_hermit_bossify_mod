@@ -86,6 +86,53 @@ return
         WATER_POINT_MIN_SPACING = 5,
     },
 
+    -- 贝壳聚拢轰炸：75% 贝壳环首次召唤后，每 REPEAT_INTERVAL 秒释放一次。
+    -- 技能流程 ORBIT → GATHER → SPIN → THROW → RETURN → ORBIT：
+    -- 环绕贝壳脱离轨道，聚拢到 Boss 头顶高速旋转蓄力，再砸向玩家落点。
+    SHELL_BOMBARD =
+    {
+        -- 首次贝壳环召唤后，每隔该秒数释放一次聚拢轰炸。
+        REPEAT_INTERVAL = 15,
+
+        -- 施法前摇：贝壳保持原轨道运行、Boss 播放施法动画的时长（秒）。
+        CAST_DURATION = 1.0,
+
+        -- 聚拢：贝壳从轨道位置飞向头顶的时长（秒）。
+        GATHER_DURATION = 1.0,
+
+        -- 旋转蓄力：贝壳在头顶高速旋转的时长（秒）。
+        SPIN_DURATION = 1.2,
+
+        -- 旋转蓄力期间的角速度（弧度/秒），需明显快于环绕角速度。
+        SPIN_ANGULAR_SPEED = 6,
+
+        -- 聚拢 / 旋转阶段贝壳相对头顶的高度（单位）。
+        GATHER_HEIGHT = 3.5,
+
+        -- 聚拢 / 旋转阶段的聚合半径（单位），略小于环绕半径。
+        GATHER_RADIUS = 2.2,
+
+        -- 投掷：贝壳从头顶砸向落点的飞行时长（秒）。
+        THROW_DURATION = 0.6,
+
+        -- 返回：落点飞回 Boss 环绕轨道的时长（秒）。
+        RETURN_DURATION = 1.0,
+
+        -- 落点预警：落点标记从出现到砸下的提前量（秒），给玩家走位空间。
+        IMPACT_WARNING = 0.6,
+
+        -- 落点半径：每枚贝壳落点相对玩家位置的散布半径（单位），
+        -- 多玩家/多贝壳时让落点分散，避免完全重叠。
+        IMPACT_SCATTER = 2.5,
+
+        -- 落地伤害半径与伤害值。
+        IMPACT_DAMAGE_RADIUS = 2.0,
+        IMPACT_DAMAGE = BASE_DAMAGE,
+
+        -- 选择落点时玩家与 Boss 的最大距离。
+        TARGET_RANGE = 40,
+    },
+
     GUARD_SUMMON =
     {
         PHASE_HEALTH = 0.9,
