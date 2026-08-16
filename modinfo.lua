@@ -1,7 +1,7 @@
 name = "寄居蟹隐士 Boss"
 description = "将帝王蟹的信物交给寄居蟹隐士，向她发起挑战，胜利后获取珍珠"
 author = "夜阑"
-version = "0.1.2"
+version = "0.1.3"
 
 api_version = 10
 dst_compatible = true
