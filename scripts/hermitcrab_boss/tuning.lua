@@ -129,6 +129,16 @@ return
         IMPACT_DAMAGE_RADIUS = 2.0,
         IMPACT_DAMAGE = BASE_DAMAGE,
 
+        -- 落地击退：把落点范围内的玩家向外震开（增强砸地冲击力）。
+        IMPACT_KNOCKBACK_STRENGTH = 1.0,   -- 击退力度倍率（shell_ring 接触为 0.45）
+
+        -- 落地屏幕震动：命中玩家时震屏，营造重物砸地的重量感。
+        -- 基于 DST 原生 camerashake prefab（落点附近震源），对客户端玩家自动生效。
+        IMPACT_SHAKE_DURATION = 0.4,       -- 震屏持续时长（秒）
+        IMPACT_SHAKE_SPEED = 0.6,          -- 震屏频率（Shake 第 4 个参数 / Frequency）
+        IMPACT_SHAKE_SCALE = 0.8,          -- 震屏幅度（Shake 第 2 个参数 / Intensity）
+        IMPACT_SHAKE_RADIUS = 12,          -- 震源影响半径
+
         -- 选择落点时玩家与 Boss 的最大距离。
         TARGET_RANGE = 40,
     },

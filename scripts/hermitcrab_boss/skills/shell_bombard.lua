@@ -20,12 +20,14 @@ local tuning = require("hermitcrab_boss/tuning").SHELL_BOMBARD
 
 local ShellBombard =
 {
-    -- 落点预警水柱（crab_king_waterspout）与落地特效（rock_break_fx）由本技能生成；
+    -- 落点预警水柱（crab_king_waterspout）、落地特效（rock_break_fx）与
+    -- 落地震屏（camerashake）由本技能生成；
     -- 贝壳实体复用 shell_ring 生成的 hermitcrab_boss_shell，不在此重复声明。
     PREFABS =
     {
         "crab_king_waterspout",
         "rock_break_fx",
+        "camerashake",
     },
 }
 
@@ -74,6 +76,12 @@ end
 -- 两阶段间的线性插值（带 ease-in-out，让移动更自然）。
 local function EaseInOut(t)
     return t * t * (3 - 2 * t)
+end
+
+-- 加速缓入：用于"砸落"飞行段，让贝壳落地瞬间速度最大，
+-- 营造"砸"下来的冲击感。EaseInOut 在落地时速度归零，会显得"飘"。
+local function EaseIn(t)
+    return t * t * t
 end
 
 local function ShellPos(shell)
@@ -344,7 +352,7 @@ UpdateThrow = function(inst)
         end
     end
 
-    local t = EaseInOut(flight_elapsed / flight)
+    local t = EaseIn(flight_elapsed / flight)
     local ty = 0.5 -- 落地高度
 
     for shell, entry in pairs(inst._bombard_throw_entries or {}) do
@@ -366,6 +374,7 @@ end
 -- 落地：对落点半径内玩家造成伤害，随后进入 RETURN。
 --------------------------------------------------------------------------
 ImpactAll = function(inst)
+    local shaken_players = {}
     for shell, entry in pairs(inst._bombard_throw_entries or {}) do
         if shell:IsValid() then
             local x, _, z = ShellPos(shell)
@@ -377,7 +386,7 @@ ImpactAll = function(inst)
                 fx.Transform:SetPosition(entry.aim_x, 0, entry.aim_z)
             end
 
-            -- 范围伤害（由 Boss 造成，保证仇恨归属）。
+            -- 范围伤害 + 击退（由 Boss 造成，保证仇恨归属）。
             for _, target in ipairs(TheSim:FindEntities(
                 entry.aim_x, 0, entry.aim_z,
                 tuning.IMPACT_DAMAGE_RADIUS + 1,
@@ -397,7 +406,45 @@ ImpactAll = function(inst)
                             tuning.IMPACT_DAMAGE,
                             shell
                         )
+                        -- 落地击退：把玩家从落点向外震开，增强冲击力。
+                        target:PushEvent("knockback", {
+                            knocker = shell,
+                            radius = tuning.IMPACT_DAMAGE_RADIUS
+                                + target:GetPhysicsRadius(0),
+                            strengthmult = tuning.IMPACT_KNOCKBACK_STRENGTH,
+                            forcelanded = true,
+                        })
+                        shaken_players[target] = true
                     end
+                end
+            end
+        end
+    end
+
+    -- 屏幕震动：在落点生成 camerashake 震源（每个落点一次，不在命中范围内才触发，
+    -- 否则远处无人时也会震屏）。camerashake prefab 是 DST 原生机制，会对附近
+    -- 客户端玩家自动生效，比直接调 TheCamera 更稳，不依赖任何特定 mod 的组件。
+    if next(shaken_players) ~= nil then
+        local seen = {}
+        for shell, entry in pairs(inst._bombard_throw_entries or {}) do
+            if seen[entry.aim_x .. "," .. entry.aim_z] == nil then
+                seen[entry.aim_x .. "," .. entry.aim_z] = true
+                local shake = SpawnPrefab("camerashake")
+                if shake ~= nil then
+                    shake:SetShakeAll(true, false, true)
+                    shake:SetRadius(tuning.IMPACT_SHAKE_RADIUS)
+                    shake:SetDuration(tuning.IMPACT_SHAKE_DURATION)
+                    shake:SetIntensity(tuning.IMPACT_SHAKE_SCALE)
+                    shake:SetFrequency(tuning.IMPACT_SHAKE_SPEED)
+                    shake:Shake(
+                        Vector3(entry.aim_x, 0, entry.aim_z),
+                        tuning.IMPACT_SHAKE_DURATION,
+                        tuning.IMPACT_SHAKE_SCALE,
+                        tuning.IMPACT_SHAKE_RADIUS,
+                        tuning.IMPACT_SHAKE_SPEED,
+                        ROCK,
+                        false
+                    )
                 end
             end
         end
