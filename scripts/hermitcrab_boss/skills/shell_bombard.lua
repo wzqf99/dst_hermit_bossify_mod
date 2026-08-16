@@ -265,6 +265,7 @@ BeginThrow = function(inst)
 
     local players = CollectPlayers(inst)
     inst._bombard_throw_entries = {}
+    inst._bombard_flight_starts = nil
 
     for index, shell in ipairs(shells) do
         local aim_x, aim_z
@@ -328,20 +329,33 @@ UpdateThrow = function(inst)
         return
     end
 
+    -- 飞行首帧记录起点（预警阶段刚结束时的头顶位置），
+    -- 之后以固定起点向落点插值；若每帧用当前位置作起点，会变成
+    -- “渐近逼近”，表现为前段几乎不动、末帧瞬移到落点。
+    if inst._bombard_flight_starts == nil then
+        inst._bombard_flight_starts = {}
+        for shell in pairs(inst._bombard_throw_entries or {}) do
+            if shell:IsValid() then
+                local sx, sy, sz = ShellPos(shell)
+                inst._bombard_flight_starts[shell] = { x = sx, y = sy, z = sz }
+            end
+        end
+    end
+
     local t = EaseInOut(flight_elapsed / flight)
-    local boss_x, boss_y, _ = inst.Transform:GetWorldPosition()
+    local ty = 0.5 -- 落地高度
 
     for shell, entry in pairs(inst._bombard_throw_entries or {}) do
         if shell:IsValid() then
-            local sx, _, sz = ShellPos(shell)
-            local start_y = boss_y + tuning.GATHER_HEIGHT
-            local ty = 0.5 -- 落地高度
-            SetShellPos(
-                shell,
-                sx + (entry.aim_x - sx) * t,
-                start_y + (ty - start_y) * t,
-                sz + (entry.aim_z - sz) * t
-            )
+            local start = inst._bombard_flight_starts[shell]
+            if start ~= nil then
+                SetShellPos(
+                    shell,
+                    start.x + (entry.aim_x - start.x) * t,
+                    start.y + (ty - start.y) * t,
+                    start.z + (entry.aim_z - start.z) * t
+                )
+            end
         end
     end
 end
@@ -422,16 +436,30 @@ UpdateReturn = function(inst)
     local boss_x, boss_y, boss_z = inst.Transform:GetWorldPosition()
 
     if elapsed >= duration or count <= 0 then
-        -- 结束：交还轨道控制，重新均分角度。
+        -- 结束：交还轨道控制，重新均分角度，并取消逐帧循环任务，
+        -- 否则每轮轰炸都会泄漏一个永不停歇的周期任务。
         ReassignOrbit(inst, shells)
         inst._bombard_state = STATE.IDLE
-        inst._bombard_task = nil
+        if inst._bombard_task ~= nil then
+            inst._bombard_task:Cancel()
+            inst._bombard_task = nil
+        end
         return
     end
 
     local t = EaseInOut(elapsed / duration)
     for index, shell in ipairs(shells) do
-        local sx, sy, sz = ShellPos(shell)
+        -- 返回起点：BeginReturn 记录的落点位置，固定起点插值，
+        -- 避免每帧用当前位置作起点导致的渐近/瞬移。
+        local start = inst._bombard_return_starts ~= nil
+            and inst._bombard_return_starts[shell]
+            or nil
+        local sx, sy, sz
+        if start ~= nil then
+            sx, sy, sz = start.x, start.y, start.z
+        else
+            sx, sy, sz = ShellPos(shell)
+        end
         -- 返回目标：环绕轨道上的初始角度位置。
         local angle = (index - 1) * TWOPI / count
         local tx = boss_x + tuning.GATHER_RADIUS * math.cos(angle)
