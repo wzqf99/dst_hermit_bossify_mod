@@ -313,6 +313,14 @@ local function SetControlMode(inst, mode)
     inst._control_mode = mode
 end
 
+-- 返回该贝壳的静态环绕半径（ORBIT_RADIUS + 视觉变体偏移），
+-- 供"贝壳聚拢轰炸"技能在 RETURN 阶段把贝壳直接送回真实轨道半径，
+-- 避免交还轨道控制后再发生一次径向滑移。
+local function GetOrbitRadius(inst)
+    local variation = inst._visual_data or VISUAL_VARIATIONS[1]
+    return ORBIT_RADIUS + variation.radius
+end
+
 -- 技能结束后重新分配轨道角度：以当前存活贝壳数量均匀分布。
 -- @param count      存活贝壳总数
 -- @param start_angle 起始角度（弧度）
@@ -326,17 +334,19 @@ local function RecalcOrbitAngle(inst, count, start_angle)
     inst._base_angle = start_angle
         + ((inst._orbit_index or 1) - 1) * TWOPI / count
 
-    -- 重置跟随插值与起飞起点到当前实际位置：
-    -- 1. 跟随插值起点复位，避免长距离跳变（与 SetOrbitAnchor 一致）；
-    -- 2. 起飞起点复位到当前坐标，让贝壳从当前位置平滑飞回轨道，
-    --    而不是瞬移回最初的水柱位置（launch 分支用 _start_* 做插值起点）。
+    -- 复位跟随插值起点到当前实际位置，让贝壳从当前位置平滑跟随回轨道。
     local x, y, z = inst.Transform:GetWorldPosition()
     inst._follow_x = x
     inst._follow_z = z
     inst._start_x = x
     inst._start_y = y
     inst._start_z = z
-    inst._start_time = GetTime()
+    inst._last_update_time = GetTime()
+    -- 关键：不能把 _start_time 重置为当前时间，否则 elapsed 归零后
+    -- UpdatePosition 会重新走 launch 起飞分支（带 LAUNCH_HEIGHT=7 的弧线弹跳），
+    -- 视觉上像"又重播了一遍起飞动画"。这里让 elapsed 刚好越过 LAUNCH_DURATION，
+    -- 直接进入环绕跟随分支（follow 平滑跟随，无弧线弹跳）。
+    inst._start_time = GetTime() - LAUNCH_DURATION
 end
 
 local function fn()
@@ -381,6 +391,7 @@ local function fn()
     inst.SetOrbitAnchor = SetOrbitAnchor
     inst.SetControlMode = SetControlMode
     inst.RecalcOrbitAngle = RecalcOrbitAngle
+    inst.GetOrbitRadius = GetOrbitRadius
     inst.BreakShell = BreakShell
     inst.OnRemoveEntity = OnRemoveEntity
 

@@ -115,7 +115,7 @@ end
 --------------------------------------------------------------------------
 -- 轨道重算：按当前存活贝壳数量均匀分配角度，并交还轨道控制。
 --------------------------------------------------------------------------
-local function ReassignOrbit(inst, shells)
+local function ReassignOrbit(inst, shells, start_angle)
     local living = {}
     for _, shell in ipairs(shells) do
         if shell ~= nil and shell:IsValid() then
@@ -128,7 +128,9 @@ local function ReassignOrbit(inst, shells)
         return
     end
 
-    local start_angle = math.random() * TWOPI
+    -- 允许传入已确定的 start_angle（RETURN 阶段结束时复用），
+    -- 保证 RETURN 目标角度与最终轨道角度完全一致，交还控制后不产生切向跳变。
+    start_angle = start_angle or (math.random() * TWOPI)
     for index, shell in ipairs(living) do
         shell._orbit_index = index
         shell:RecalcOrbitAngle(count, start_angle)
@@ -411,14 +413,27 @@ BeginReturn = function(inst)
     inst._bombard_state = STATE.RETURN
     inst._bombard_return_start = GetTime()
 
-    -- 记录返回起点（当前落点位置）与存活贝壳。
-    local shells = {}
-    for shell in pairs(inst._bombard_throw_entries or {}) do
-        if shell:IsValid() then
-            shells[shell] = true
+    -- 按 _orbit_shells 的稳定顺序收集存活贝壳，保证 RETURN 阶段的目标角度
+    -- 与结束时 ReassignOrbit 的分配顺序一致，避免交还控制后贝壳切向瞬移。
+    local order = {}
+    for _, shell in ipairs(inst._orbit_shells or {}) do
+        if shell ~= nil and shell:IsValid() then
+            table.insert(order, shell)
         end
     end
-    inst._bombard_return_shells = shells
+
+    if #order <= 0 then
+        AbortSkill(inst)
+        return
+    end
+
+    inst._bombard_return_order = order
+    inst._bombard_return_start_angle = math.random() * TWOPI
+    inst._bombard_return_starts = {}
+    for _, shell in ipairs(order) do
+        local sx, sy, sz = ShellPos(shell)
+        inst._bombard_return_starts[shell] = { x = sx, y = sy, z = sz }
+    end
 end
 
 UpdateReturn = function(inst)
@@ -426,8 +441,8 @@ UpdateReturn = function(inst)
     local duration = tuning.RETURN_DURATION
 
     local shells = {}
-    for shell in pairs(inst._bombard_return_shells or {}) do
-        if shell:IsValid() then
+    for _, shell in ipairs(inst._bombard_return_order or {}) do
+        if shell ~= nil and shell:IsValid() then
             table.insert(shells, shell)
         end
     end
@@ -436,9 +451,9 @@ UpdateReturn = function(inst)
     local boss_x, boss_y, boss_z = inst.Transform:GetWorldPosition()
 
     if elapsed >= duration or count <= 0 then
-        -- 结束：交还轨道控制，重新均分角度，并取消逐帧循环任务，
-        -- 否则每轮轰炸都会泄漏一个永不停歇的周期任务。
-        ReassignOrbit(inst, shells)
+        -- 结束：交还轨道控制（沿用 RETURN 已用的 start_angle，角度一致），
+        -- 并取消逐帧循环任务，否则每轮轰炸都会泄漏一个永不停歇的周期任务。
+        ReassignOrbit(inst, shells, inst._bombard_return_start_angle)
         inst._bombard_state = STATE.IDLE
         if inst._bombard_task ~= nil then
             inst._bombard_task:Cancel()
@@ -460,11 +475,15 @@ UpdateReturn = function(inst)
         else
             sx, sy, sz = ShellPos(shell)
         end
-        -- 返回目标：环绕轨道上的初始角度位置。
-        local angle = (index - 1) * TWOPI / count
-        local tx = boss_x + tuning.GATHER_RADIUS * math.cos(angle)
+        -- 返回目标：与 ReassignOrbit 相同的角度分配 + 真实环绕半径。
+        local angle = inst._bombard_return_start_angle
+            + (index - 1) * TWOPI / count
+        local radius = shell.GetOrbitRadius ~= nil
+            and shell:GetOrbitRadius()
+            or tuning.GATHER_RADIUS
+        local tx = boss_x + radius * math.cos(angle)
         local ty = boss_y + 0.8
-        local tz = boss_z - tuning.GATHER_RADIUS * math.sin(angle)
+        local tz = boss_z - radius * math.sin(angle)
         SetShellPos(
             shell,
             sx + (tx - sx) * t,
