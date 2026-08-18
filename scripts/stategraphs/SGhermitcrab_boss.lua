@@ -564,6 +564,7 @@ local states =
 
         -- 超时兜底 → 也按胜利结束
         ontimeout = function(inst)
+            inst._victory_animation_finished = true
             inst:FinishEncounter(true)
         end,
     },

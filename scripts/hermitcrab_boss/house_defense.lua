@@ -26,6 +26,7 @@ local HOUSE_PREFABS =
 local function IsActive(inst)
     return inst._final_state == HouseDefense.ACTIVE_STATE
         and not inst._encounter_resolved
+        and not inst._surrendering
 end
 
 -- 取消任务：统一走 util（nil 安全）。

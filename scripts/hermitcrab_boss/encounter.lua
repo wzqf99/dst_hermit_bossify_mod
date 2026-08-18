@@ -45,6 +45,9 @@ local function BeginSurrender(inst)
     end
 
     inst._surrendering = true
+    -- 本体血量归零时，投降状态就是胜利动画本身；结算必须等状态结束。
+    inst._victory_animation_started = true
+    inst._victory_animation_finished = nil
     inst.components.health:SetInvincible(true)
     inst.components.combat:SetTarget(nil)
     inst.components.combat:CancelAttack()
@@ -68,8 +71,52 @@ local function LearnPearlReward(hermit)
     end
 end
 
+-- 最终阶段的胜利由房屋 minhealth 事件触发，不会经过本体的 healthdelta。
+-- 先拆掉房屋防御并让隐藏的 Boss 重新出现，再由 surrender 状态完成结算。
+local function StartVictoryAnimation(inst)
+    if inst._victory_animation_started
+        or inst._encounter_resolved
+        or inst._surrendering then
+        return
+    end
+
+    inst._victory_animation_started = true
+    inst._victory_animation_finished = nil
+    inst._surrendering = true
+    inst.components.health:SetInvincible(true)
+    inst.components.combat:SetTarget(nil)
+    inst.components.combat:CancelAttack()
+
+    if inst._watch_task ~= nil then
+        inst._watch_task:Cancel()
+        inst._watch_task = nil
+    end
+
+    -- ENCOUNTER_FINISHING 会清理房屋、飞弹、瓶子和最终阶段小怪。
+    inst:PushEvent(Encounter.FINISHING_EVENT, { victory = true, animation = true })
+
+    -- 最终阶段时 Boss 被 Hide() 并关闭了阴影；投降动画需要重新展示本体。
+    inst:Show()
+    if inst.DynamicShadow ~= nil then
+        inst.DynamicShadow:Enable(true)
+    end
+    inst:RemoveTag("invisible")
+    inst:RemoveTag("NOCLICK")
+
+    inst:PushEvent(events.SURRENDER)
+end
+
 local function Finish(inst, victory, already_removing)
     if inst._encounter_resolved then
+        return
+    end
+
+    -- 房屋被击破时第一次调用只负责启动动画；动画期间的重复结算事件应忽略。
+    if victory and not inst._victory_animation_started then
+        StartVictoryAnimation(inst)
+        return
+    elseif victory
+        and not inst._victory_animation_finished then
         return
     end
 
