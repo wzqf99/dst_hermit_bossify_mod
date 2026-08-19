@@ -13,6 +13,7 @@ return
     -- 阶段技能（触发顺序由 phase_scheduler 的阶段表决定）
     GUARD_SUMMON = "hermitboss_guard_summon",         -- 90% 蟹卫召唤
     SHELL_PHASE = "hermitboss_shell_phase",           -- 75% 贝壳环
+    SHELL_RESUMMON = "hermitboss_shell_resummon",     -- 贝壳全灭后的重新召唤（复用施法动画，不触发裂隙降级）
     SHELL_BOMBARD = "hermitboss_shell_bombard",       -- 贝壳聚拢轰炸（贝壳环后每 15 秒循环）
     KELP_SNARE = "hermitboss_kelp_snare",             -- 50% 海带骨刺·牢笼（玩家脚下）
     KELP_SPIRAL = "hermitboss_kelp_spiral",           -- 50% 海带骨刺·螺旋（Boss 脚下阿基米德螺旋）

@@ -300,6 +300,24 @@ local function Trigger(inst)
     inst:PushEvent(events.SHELL_PHASE)
 end
 
+-- 重新召唤贝壳环：贝壳被全部摧毁后，在轰炸循环的时机重新召唤 6 枚贝壳。
+-- 与首次 Trigger 的区别：不走 SHELL_PHASE 事件（避免 fissure 把裂隙月相降级），
+-- 而是走独立的 SHELL_RESUMMON 事件复用 trident_cast 施法动画；同时复位
+-- 首次召唤留下的守卫与失效贝壳引用，让 Spawn 能再次生成。
+local function Resummon(inst)
+    if inst._final_phase_triggered
+        or inst._encounter_resolved
+        or inst._surrendering then
+        return
+    end
+
+    inst._shell_phase_released = nil
+    inst._orbit_shells = nil
+
+    inst.components.combat:CancelAttack()
+    inst:PushEvent(events.SHELL_RESUMMON)
+end
+
 -- 贝壳以"爆壳"收场：战斗结束不再静默删除，统一走破碎掉落逻辑（掉歌唱贝壳）。
 local function BreakOrbitShells(inst)
     local shells = inst._orbit_shells
@@ -341,6 +359,7 @@ end
 function ShellRing.Attach(inst)
     inst.SpawnShellRing = Spawn
     inst.TriggerShellRing = Trigger
+    inst.ResummonShellRing = Resummon
     inst.TryShellContactHit = TryContactHit
 
     inst:ListenForEvent(events.ENCOUNTER_FINISHED, OnEncounterFinished)

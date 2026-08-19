@@ -69,6 +69,16 @@ local events =
         end
     end),
 
+    -- 贝壳全灭后的重新召唤：复用 trident_cast 施法动画，但不推 SHELL_PHASE，
+    -- 避免 fissure 模块把裂隙月相等级降级。
+    EventHandler(event_names.SHELL_RESUMMON, function(inst)
+        if not inst._surrendering
+            and not inst._final_phase_triggered
+            and not inst._encounter_resolved then
+            inst.sg:GoToState("trident_cast")
+        end
+    end),
+
     -- 贝壳聚拢轰炸：贝壳环后每 15 秒循环，进入施法状态（贝壳头顶蓄力后砸落）。
     EventHandler(event_names.SHELL_BOMBARD, function(inst)
         if not inst._surrendering

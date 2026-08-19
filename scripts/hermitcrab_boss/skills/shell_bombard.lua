@@ -621,6 +621,16 @@ local function OnShellPhase(inst)
                 StopLoop(inst)
                 return
             end
+
+            -- 贝壳全灭时，改为重新召唤贝壳环（复用 trident_cast 施法动画），
+            -- 而不是空放一次没有贝壳的轰炸。
+            if #CollectLivingShells(inst) <= 0 then
+                if inst.ResummonShellRing ~= nil then
+                    inst:ResummonShellRing()
+                end
+                return
+            end
+
             -- 允许再次施法，走 SG 施法状态。
             inst._bombard_running = nil
             inst.components.combat:CancelAttack()
