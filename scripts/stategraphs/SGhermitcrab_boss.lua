@@ -16,13 +16,13 @@ local events =
     -- 移动事件（由 locomotor 组件驱动）
     CommonHandlers.OnLocomote(true, true),
 
-    -- 攻击事件：进入 attack 状态，记录目标
+    -- 攻击事件：一阶段进入 bottle_attack（远程投瓶），75% 后进入 attack（近战）。
     EventHandler("doattack", function(inst, data)
         if not inst._surrendering
             and not inst._final_phase_triggered
             and not inst.sg:HasStateTag("busy") then
             inst.sg:GoToState(
-                "attack",
+                inst._bottle_mode and "bottle_attack" or "attack",
                 data ~= nil and data.target or inst.components.combat.target
             )
         end
@@ -239,6 +239,49 @@ local states =
     },
 
     -- ============================
+    -- 一阶段远程投瓶：复用原版隐士 throw 动画（hermitcrab_build 自带），
+    -- 手持漂流瓶，第 7 帧向玩家脚下抛出一个瓶子（落地爆炸由 bottle_toss 处理）。
+    -- ============================
+    State
+    {
+        name = "bottle_attack",
+        tags = { "attack", "busy" },
+
+        onenter = function(inst, target)
+            inst.components.locomotor:StopMoving()
+            inst.components.combat:StartAttack()
+            inst.sg.statemem.target = target
+
+            inst.AnimState:OverrideSymbol("swap_object", "swap_bottle", "swap_bottle")
+            inst.AnimState:Show("ARM_carry")
+            inst.AnimState:Hide("ARM_normal")
+            inst.AnimState:PlayAnimation("throw")
+            inst.sg:SetTimeout(1.5)
+        end,
+
+        timeline =
+        {
+            -- 原版隐士 throw 的投掷帧在第 7 帧。
+            TimeEvent(7 * FRAMES, function(inst)
+                inst:ThrowBottleAt(inst.sg.statemem.target)
+            end),
+        },
+
+        events =
+        {
+            EventHandler("animover", function(inst)
+                if inst.AnimState:AnimDone() then
+                    inst.sg:GoToState("idle")
+                end
+            end),
+        },
+
+        ontimeout = function(inst)
+            inst.sg:GoToState("idle")
+        end,
+    },
+
+    -- ============================
     -- 50% 血量：海带骨刺连招（牢笼 + 螺旋）
     -- 两个独立技能（kelp_snare / kelp_spiral）共用一次星杖施法动画，
     -- 在帧上同时释放；各技能内部按自身触发状态决定是否生成。
@@ -434,8 +477,9 @@ local states =
             inst.components.combat:CancelAttack()
             inst.components.health:SetInvincible(true)
 
-            inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
-            inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+            -- 一阶段手持漂流瓶召唤蟹卫：用瓶子做星杖施法动作。
+            inst.AnimState:OverrideSymbol("swap_object", "swap_bottle", "swap_bottle")
+            inst.AnimState:OverrideSymbol("swap_trident", "swap_bottle", "swap_bottle")
             inst.AnimState:Show("ARM_carry")
             inst.AnimState:Hide("ARM_normal")
             inst.AnimState:PlayAnimation("staff_pre")

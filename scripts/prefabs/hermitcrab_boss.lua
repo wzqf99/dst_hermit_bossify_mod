@@ -1,5 +1,6 @@
 -- Boss 实体：只负责外观、基础战斗组件和功能模块装配。
 local boss_talk = require("hermitcrab_boss/boss_talk")
+local bottle_toss = require("hermitcrab_boss/skills/bottle_toss")
 local brain = require("brains/hermitcrab_bossbrain")
 local encounter = require("hermitcrab_boss/encounter")
 local events = require("hermitcrab_boss/events")
@@ -29,6 +30,7 @@ local assets =
     Asset("ANIM", "anim/player_groggy.zip"),
     Asset("ANIM", "anim/hermitcrab_build.zip"),
     Asset("ANIM", "anim/swap_trident.zip"),
+    Asset("ANIM", "anim/swap_bottle.zip"),
     Asset("SOUND", "sound/sfx.fsb"),
     Asset("SOUND", "sound/wilson.fsb"),
 }
@@ -52,6 +54,7 @@ AddModulePrefabs(kelp_spiral)
 AddModulePrefabs(shell_ring)
 AddModulePrefabs(shell_bombard)
 AddModulePrefabs(guard_summon)
+AddModulePrefabs(bottle_toss)
 AddModulePrefabs(final_phase)
 
 -- 阶段调度：集中声明"血量阈值 → 阶段技能"。
@@ -111,8 +114,9 @@ local function ConfigureAppearance(inst)
     inst.AnimState:SetBank("wilson")
     inst.AnimState:SetBuild("hermitcrab_build")
     inst.AnimState:PlayAnimation("idle_loop", true)
-    inst.AnimState:OverrideSymbol("swap_object", "swap_trident", "swap_trident")
-    inst.AnimState:OverrideSymbol("swap_trident", "swap_trident", "swap_trident")
+    -- 一阶段初始手持漂流瓶（75% 进入三叉戟施法状态后切回 swap_trident）。
+    inst.AnimState:OverrideSymbol("swap_object", "swap_bottle", "swap_bottle")
+    inst.AnimState:OverrideSymbol("swap_trident", "swap_bottle", "swap_bottle")
     inst.AnimState:Show("ARM_carry")
     inst.AnimState:Hide("ARM_normal")
     inst.AnimState:Hide("HAT")
@@ -194,6 +198,7 @@ local function fn()
     shell_ring.Attach(inst)
     shell_bombard.Attach(inst)
     guard_summon.Attach(inst)
+    bottle_toss.Attach(inst)
     -- 血线台词最后挂：只负责说话，不改变战斗状态
     boss_talk.Attach(inst)
 

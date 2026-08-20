@@ -152,6 +152,40 @@ return
         SPAWN_ATTEMPTS = 30,
     },
 
+    -- 一阶段瓶子投掷：100% ~ 75% 期间，Boss 手持漂流瓶，保持距离远程投瓶。
+    -- 复用 combat 攻击周期驱动（doattack → bottle_attack → throw 动画投瓶）。
+    BOTTLE_TOSS =
+    {
+        -- 投瓶距离：KeepDistanceAndAttack 把 Boss 带/保持在 [RETREAT_DISTANCE, ATTACK_RANGE] 之间。
+        ATTACK_RANGE = 14,
+        HIT_RANGE = 18,
+
+        -- 后退阈值：玩家距离小于该值时 Boss 后退，保持远程距离。
+        RETREAT_DISTANCE = 9,
+
+        -- 后退时是否跑步（true = 跑步后退，节奏更利落）。
+        RETREAT_RUN = true,
+
+        -- 投瓶间隔（秒），即 combat 攻击周期。
+        ATTACK_PERIOD = 3.5,
+
+        -- 瓶子落地爆炸参数。
+        DAMAGE = 40,
+        DAMAGE_RADIUS = 2.5,
+        SPEED = 12,
+        LAUNCH_HEIGHT = 2.5,
+
+        -- 落点相对玩家当前位置的抖动半径（逼玩家持续移动）。
+        AIM_JITTER = 1.2,
+
+        -- 落地爆炸特效（原版亮茄爆炸，与房屋阶段一致）。
+        EXPLODE_FX = "bomb_lunarplant_explode_fx",
+
+        -- 75% 切回近战后的恢复参数（与 ConfigureServerComponents 初始值一致）。
+        MELEE_ATTACK_RANGE = 1.5,
+        MELEE_HIT_RANGE = 2,
+    },
+
     -- 堵住裂缝 Boss 战强化：随战斗阶段推进逐级"变大"（月相等级 1~5）。
     FISSURES =
     {

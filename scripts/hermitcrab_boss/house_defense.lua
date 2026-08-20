@@ -1,4 +1,5 @@
 local util = require("hermitcrab_boss/util")
+local bottle_bombard = require("hermitcrab_boss/bottle_bombard")
 local kelp_spike = require("hermitcrab_boss/skills/kelp_spike")
 local tuning = require("hermitcrab_boss/tuning").FINAL_PHASE
 
@@ -363,98 +364,21 @@ end
 -- ---------------------------------------------------------------------------
 local ScheduleBottleVolley
 
-local function ExplodeBottle(bottle, attacker)
-    if bottle == nil or not bottle:IsValid() then
-        return
-    end
-
-    local x, y, z = bottle.Transform:GetWorldPosition()
-
-    -- 亮茄炸弹爆炸效果
-    local fx = SpawnPrefab("bomb_lunarplant_explode_fx")
-    if fx ~= nil then
-        fx.Transform:SetPosition(x, y, z)
-    end
-
-    local hits = TheSim:FindEntities(x, y, z, tuning.BOTTLE_DAMAGE_RADIUS, { "player" })
-    for _, player in ipairs(hits) do
-        if player ~= nil
-            and player:IsValid()
-            and not player:HasTag("playerghost")
-            and not player:IsInLimbo()
-            and player.components.health ~= nil
-            and not player.components.health:IsDead()
-            and player.components.combat ~= nil then
-            if attacker ~= nil and attacker:IsValid() then
-                -- 伤害归属 Boss，保证仇恨与击杀统计正确。
-                player.components.combat:GetAttacked(
-                    attacker,
-                    tuning.BOTTLE_DAMAGE,
-                    bottle
-                )
-            else
-                -- Boss 已失效时的兜底，避免因缺失攻击者而报错。
-                player.components.health:DoDelta(-tuning.BOTTLE_DAMAGE)
-            end
-        end
-    end
-
-    bottle:Remove()
-end
-
 local function SpawnThrownBottle(inst, house, aim)
-    local bottle = SpawnPrefab("messagebottle_throwable")
-    if bottle == nil then
-        return
-    end
-
-    local house_pos = house:GetPosition()
-    local sx = house_pos.x
-    local sy = house_pos.y + tuning.BOTTLE_LAUNCH_HEIGHT
-    local sz = house_pos.z
-
-    bottle.Transform:SetPosition(sx, sy, sz)
-    bottle:AddTag("NOCLICK")
-    bottle:AddTag("hermitboss_bottle")
-    if bottle.components.inventoryitem ~= nil then
-        bottle.components.inventoryitem.canbepickedup = false
-    end
-    -- 注意：绝对不要在 bottle 上存实体引用（如 house），
-    -- 否则任何路径触发 JSON 编码时会导致 encode_compliant 递归爆栈。
-
-    -- 使用原版 complexprojectile 组件发射：
-    -- 自带抛物线轨迹、飞行旋转动画（spin_loop），落地必然触发 OnHit，
-    -- 不会再出现手写 SetPosition 与物理组件冲突导致"飞到了却不爆炸"。
-    local projectile = bottle.components.complexprojectile
-    if projectile ~= nil then
-        projectile:SetOnHit(function(proj, attacker, target)
-            ExplodeBottle(proj, attacker)
-        end)
-        projectile:SetHorizontalSpeedForDistance(
-            math.sqrt((aim.x - sx) * (aim.x - sx) + (aim.z - sz) * (aim.z - sz)),
-            tuning.BOTTLE_SPEED
-        )
-        -- 将 Boss 作为攻击者传入，落地爆炸的伤害正确归属到 Boss。
-        projectile:Launch(Vector3(aim.x, 0, aim.z), inst)
-        -- 关闭碰撞：直飞目标落点，不被树/建筑等障碍物挡下
-        if bottle.Physics ~= nil then
-            bottle.Physics:SetCollides(false)
-        end
-    end
-
-    inst._final_bottle_guids = inst._final_bottle_guids or {}
-    local guid = bottle.GUID
-    table.insert(inst._final_bottle_guids, guid)
-    bottle:ListenForEvent("onremove", function()
-        if inst._final_bottle_guids ~= nil then
-            for i, g in ipairs(inst._final_bottle_guids) do
-                if g == guid then
-                    table.remove(inst._final_bottle_guids, i)
-                    break
-                end
-            end
-        end
-    end, bottle)
+    -- 复用共享投瓶模块：从房屋抛出瓶子，落地爆炸（伤害归属 Boss）。
+    bottle_bombard.Throw(
+        house, -- thrower = 房屋（瓶子从屋顶抛出）
+        inst,  -- attacker = Boss（伤害归属）
+        aim,
+        {
+            damage = tuning.BOTTLE_DAMAGE,
+            radius = tuning.BOTTLE_DAMAGE_RADIUS,
+            speed = tuning.BOTTLE_SPEED,
+            launch_height = tuning.BOTTLE_LAUNCH_HEIGHT,
+            explode_fx = "bomb_lunarplant_explode_fx",
+        },
+        "_final_bottle_guids"
+    )
 end
 
 local function CollectBottleTargets(inst, count)
@@ -511,14 +435,7 @@ ScheduleBottleVolley = function(inst)
 end
 
 local function RemoveAllBottles(inst)
-    local guids = inst._final_bottle_guids or {}
-    inst._final_bottle_guids = nil
-    for _, guid in ipairs(guids) do
-        local bottle = Ents[guid]
-        if bottle ~= nil and bottle:IsValid() then
-            bottle:Remove()
-        end
-    end
+    bottle_bombard.CleanupGuids(inst, "_final_bottle_guids")
 end
 
 local function RestoreHouse(inst, release_hermit)
