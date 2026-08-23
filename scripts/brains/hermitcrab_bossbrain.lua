@@ -23,6 +23,7 @@ local WANDER_DISTANCE = 4        -- 漫游范围
 local BOTTLE_TOSS = require("hermitcrab_boss/tuning").BOTTLE_TOSS
 local BOTTLE_RETREAT_DISTANCE = BOTTLE_TOSS.RETREAT_DISTANCE
 local BOTTLE_RETREAT_RUN = BOTTLE_TOSS.RETREAT_RUN
+local BOTTLE_RETREAT_STEP = BOTTLE_TOSS.RETREAT_STEP
 
 -- ---------------------------------------------------------------------------
 -- 获取出生位置（在 SetEncounterHermit 中记录）
@@ -42,7 +43,7 @@ function HermitCrabBossBrain:OnStart()
         Leash(self.inst, GetHomePosition, LEASH_DISTANCE, RETURN_DISTANCE),
         -- 一阶段投瓶走位：太近后退、太远靠近、适中停下投瓶。
         -- 非瓶子模式（75% 后）自动 FAILED，回落到 ChaseAndAttack 近战。
-        KeepDistanceAndAttack(self.inst, BOTTLE_RETREAT_DISTANCE, BOTTLE_RETREAT_RUN, MAX_CHASE_TIME, MAX_CHASE_DISTANCE),
+        KeepDistanceAndAttack(self.inst, BOTTLE_RETREAT_DISTANCE, BOTTLE_RETREAT_RUN, BOTTLE_RETREAT_STEP, MAX_CHASE_TIME, MAX_CHASE_DISTANCE),
         ChaseAndAttack(self.inst, MAX_CHASE_TIME, MAX_CHASE_DISTANCE),
         Wander(self.inst, GetHomePosition, WANDER_DISTANCE),
     }, 0.25)

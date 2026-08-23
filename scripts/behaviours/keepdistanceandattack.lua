@@ -9,11 +9,12 @@
 -- 接管 75% 之后的近战行为。
 -- ============================================================================
 
-KeepDistanceAndAttack = Class(BehaviourNode, function(self, inst, min_dist, retreat_run, max_chase_time, give_up_dist)
+KeepDistanceAndAttack = Class(BehaviourNode, function(self, inst, min_dist, retreat_run, retreat_step, max_chase_time, give_up_dist)
     BehaviourNode._ctor(self, "KeepDistanceAndAttack")
     self.inst = inst
     self.min_dist = min_dist
     self.retreat_run = retreat_run
+    self.retreat_step = retreat_step or 6
     self.max_chase_time = max_chase_time
     self.give_up_dist = give_up_dist
     self.startruntime = nil
@@ -73,15 +74,18 @@ function KeepDistanceAndAttack:Visit()
 
             if not self.inst.sg:HasStateTag("longattack") then
                 if dist < self.min_dist and not is_attacking then
-                    -- 太近：后退（远离玩家）。
+                    -- 太近：后退（远离玩家）。用 FindWalkableOffset 找远离玩家的
+                    -- 可走点，避免直线后退撞到岛边缘（海洋）被卡住。
                     local away_angle = self.inst:GetAngleToPoint(hp) + 180
                     if away_angle > 360 then
                         away_angle = away_angle - 360
                     end
-                    if self.retreat_run then
-                        self.inst.components.locomotor:RunInDirection(away_angle)
+                    local offset = FindWalkableOffset(pt, away_angle * DEGREES, self.retreat_step, 8, true, false)
+                    if offset ~= nil then
+                        self.inst.components.locomotor:GoToPoint(pt + offset, nil, self.retreat_run)
                     else
-                        self.inst.components.locomotor:WalkInDirection(away_angle)
+                        -- 找不到可走点（如被海包围）：停下，避免继续卡住。
+                        self.inst.components.locomotor:Stop()
                     end
                 elseif dsq > combat:CalcAttackRangeSq() then
                     -- 太远：跑向玩家。

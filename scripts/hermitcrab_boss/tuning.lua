@@ -166,6 +166,9 @@ return
         -- 后退时是否跑步（true = 跑步后退，节奏更利落）。
         RETREAT_RUN = true,
 
+        -- 后退步长：每次后退搜索可走点的距离（FindWalkableOffset 半径）。
+        RETREAT_STEP = 6,
+
         -- 投瓶间隔（秒），即 combat 攻击周期。
         ATTACK_PERIOD = 3.5,
 
