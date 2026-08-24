@@ -198,6 +198,34 @@ return
         FINAL_LEVEL = 5, -- 30% 最终阶段：满月（全亮、理智光环最高）
     },
 
+    -- 奶奶身体周围的月亮氛围（与裂隙月相等级严格同步）。
+    -- 随阶段逐级增强：发光渐亮 + 掉理智（天体侵蚀感）渐强。
+    MOON_AURA =
+    {
+        -- 月光颜色（蓝白冷光，同原版月亮裂隙 moon_fissure）。
+        COLOUR = { 130/255, 160/255, 170/255 },
+
+        -- 各月相等级的 Light 参数与理智光环（索引 = 月相等级 1~5）。
+        -- 1 初始(无光) 2 弦月(90%) 3 半月(75%) 4 月盈月亏(50%) 5 满月(30%)
+        -- sanity 为负 = 掉理智。
+        LEVELS =
+        {
+            { enabled = false, radius = 0.0,  intensity = 0.0, falloff = 1.0,  sanity = 0 },
+            { enabled = true,  radius = 3.0,  intensity = 0.3, falloff = 2.25, sanity = -TUNING.SANITYAURA_TINY },
+            { enabled = true,  radius = 6.0,  intensity = 0.4, falloff = 2.0,  sanity = -TUNING.SANITYAURA_SMALL },
+            { enabled = true,  radius = 11.0, intensity = 0.5, falloff = 1.9,  sanity = -TUNING.SANITYAURA_MED },
+            { enabled = true,  radius = 11.0, intensity = 0.5, falloff = 1.9,  sanity = -TUNING.SANITYAURA_LARGE },
+        },
+
+        -- 环绕天体粒子（飘浮的蓝色光点，原版 moon_altar_link_fx），随阶段增强频率。
+        PARTICLE_PREFAB = "moon_altar_link_fx",
+        PARTICLE_RADIUS = 1.6,      -- 环绕半径
+        PARTICLE_HEIGHT_MIN = 0.4,  -- 粒子高度下限
+        PARTICLE_HEIGHT_MAX = 2.0,  -- 粒子高度上限
+        -- 各月相等级的粒子生成率（每秒光点数，索引 = 月相等级 1~5）。
+        PARTICLE_RATE = { 0, 1.5, 2.5, 4, 6 },
+    },
+
     FINAL_PHASE =
     {
         PHASE_HEALTH = 0.3,
