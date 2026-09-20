@@ -15,6 +15,50 @@ return
         WATCH_PERIOD = 2,
     },
 
+    -- ------------------------------------------------------------------
+    -- 战斗胜利后的帝王蟹水面演出。
+    --
+    -- 位置推导：
+    --   奶奶岛的陆地块定义在 map/static_layouts/hermitcrab_01.lua，其
+    --   hermitcrab_marker 由 hermitcrab_relocation_manager 放在岛屿几何
+    --   中心（原文注释：Place at island center, achievement marker for
+    --   island center point）。也就是说 marker 一定在陆地正中，不是海面。
+    --
+    --   因此演出点不能直接用 marker，要沿固定方向向外找一个真正的海面点。
+    --   岛屿近似正方形，半边长约 18 格，所以搜索距离上限要明显大于它。
+    --   搜索按固定步长推进、命中即停，保证每次位置一致可预期。
+    -- ------------------------------------------------------------------
+    VICTORY_EPILOGUE =
+    {
+        -- 台词与节奏
+        LINE_COUNT = 3,             -- 台词条数（对应 STRINGS.CRABKING_EPILOGUE_TALK）
+        POST_TALK_DELAY = 0.5,      -- 最后一句说完到开始下沉的停顿（秒）
+        LINE_INTERVAL = 3.4,        -- 每句台词的间隔（秒）
+        DIALOGUE_DELAY = 0.35,      -- 出水动画结束到第一句台词的停顿（秒）
+
+        -- 动画兜底超时（秒）：万一 animover 没到，也能继续流程。
+        REAPPEAR_FALLBACK = 4,
+        DISAPPEAR_FALLBACK = 4,
+
+        -- 海面搜索：从岛屿中心沿该方向向外推进，找到第一个海面点为止。
+        --
+        -- 角度约定与原版 brain 一致（见 brains/pollyrogerbrain.lua）：
+        --   x = dist * cos(角度)，z = dist * sin(角度)。
+        -- 在 DST 世界坐标里 +x 向右、+z 向上（屏幕），因此：
+        --   0        = 正右（东）
+        --   PI/2     = 正上（北）
+        --   -PI/2    = 正下（南）   <- 默认朝南出海
+        --   PI       = 正左（西）
+        OCEAN_SEARCH_ANGLE = -math.pi / 2,
+        OCEAN_SEARCH_START = 8,     -- 起始搜索距离（格）
+        OCEAN_SEARCH_STEP = 2,      -- 每次推进距离（格）
+        OCEAN_SEARCH_MAX = 60,      -- 最大搜索距离（格），超过则放弃演出
+        OCEAN_SEARCH_SPREAD = 0.5,  -- 主方向失败时两侧的偏转角（弧度，约 29°）
+
+        -- 外观：与原版帝王蟹一致（CRABKING_SCALE = .7）
+        SCALE = 0.7,
+    },
+
     -- 海带骨刺共享参数：50% 的两个海带技能（牢笼 / 螺旋）共用。
     KELP_SPIKE =
     {

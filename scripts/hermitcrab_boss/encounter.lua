@@ -1,5 +1,6 @@
 local events = require("hermitcrab_boss/events")
 local tuning = require("hermitcrab_boss/tuning").ENCOUNTER
+local victory_epilogue = require("hermitcrab_boss/victory_epilogue")
 
 local Encounter =
 {
@@ -10,6 +11,11 @@ local Encounter =
         "hermit_pearl",
     },
 }
+
+-- 演出实体的 prefab 也要随 Boss 一起预加载，否则首次生成会有一帧延迟。
+for _, prefab in ipairs(victory_epilogue.PREFABS or {}) do
+    table.insert(Encounter.PREFABS, prefab)
+end
 
 local function HasNearbyLivingPlayer(inst)
     for _, player in ipairs(AllPlayers) do
@@ -111,6 +117,12 @@ local function Finish(inst, victory, already_removing)
         return
     end
 
+    -- 非胜利的中断分支：清理可能还在播放的演出实体，避免残留在岛上。
+    if not victory then
+        victory_epilogue.Cancel(inst)
+        inst._victory_epilogue_finished = true
+    end
+
     -- 房屋被击破时第一次调用只负责启动动画；动画期间的重复结算事件应忽略。
     if victory and not inst._victory_animation_started then
         StartVictoryAnimation(inst)
@@ -118,6 +130,35 @@ local function Finish(inst, victory, already_removing)
     elseif victory
         and not inst._victory_animation_finished then
         return
+    end
+
+    -- ------------------------------------------------------------------
+    -- 胜利演出：先让帝王蟹在岛附近海面钻出、说几句台词、再沉入海底，
+    -- 演出结束后才继续发奖与恢复隐士。
+    --
+    -- 三个标志位分工：
+    --   _victory_epilogue_started  —— 是否已经尝试启动过（防止重复生成实体）
+    --   _victory_epilogue_finished —— 演出是否已彻底结束（结束时回调本函数）
+    -- 启动失败（找不到海面 / prefab 生成失败）时直接把 finished 置位，
+    -- 走降级路径正常结算，绝不能让奖励卡在演出上。
+    -- ------------------------------------------------------------------
+    if victory and not inst._victory_epilogue_finished then
+        if not inst._victory_epilogue_started then
+            inst._victory_epilogue_started = true
+            local started = victory_epilogue.Start(inst, function()
+                if inst:IsValid() and not inst._encounter_resolved then
+                    inst._victory_epilogue_finished = true
+                    inst:FinishEncounter(true)
+                end
+            end)
+            if started then
+                return
+            end
+            inst._victory_epilogue_finished = true
+        else
+            -- 演出进行中，等回调；忽略期间的重复结算事件。
+            return
+        end
     end
 
     inst._encounter_resolved = true

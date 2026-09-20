@@ -11,6 +11,7 @@ local require = GLOBAL.require
 local TOKEN_PREFAB = "hermitcrab_boss_token"
 local BOSS_PREFAB = "hermitcrab_boss"
 local BOSS_SHELL_PREFAB = "hermitcrab_boss_shell"
+local VICTORY_EPILOGUE_PREFAB = "hermitcrab_boss_epilogue"
 local KELP_SPIKE_PREFAB = "hermitcrab_kelp_spike"
 local WEB_GROUND_PREFAB = "hermitcrab_web_ground"
 local EVENTS = require("hermitcrab_boss/events")
@@ -36,6 +37,7 @@ PrefabFiles =
     TOKEN_PREFAB,
     BOSS_PREFAB,
     BOSS_SHELL_PREFAB,
+    VICTORY_EPILOGUE_PREFAB,
     KELP_SPIKE_PREFAB,
     WEB_GROUND_PREFAB,
 }
@@ -75,6 +77,21 @@ STRINGS.HERMITCRAB_BOSS_TALK =
         "看来得回屋子里避一避了……",
         "别以为这样就赢了，我还没输！",
     },
+}
+
+-- ---------------------------------------------------------------------------
+-- 胜利演出：帝王蟹钻出海面时说的台词。
+--
+-- 用数组（数值下标 + ipairs）而不是字符串键：演出实体走的是
+-- npc_talker:Chatter(表名, 索引)，索引是数值；这点与上面按血量档位
+-- 用字符串键（"90" / "70" …）的写法不同，不要混用。
+-- 文案与演出顺序一一对应：第 1 句 = 出水后第一句，依次类推。
+-- ---------------------------------------------------------------------------
+STRINGS.CRABKING_EPILOGUE_TALK =
+{
+    "原来是你们，打败了那位隐士。",
+    "这片海记住了你们的胜利，也记住了我的屈辱。",
+    "下次再见时，我可不会只说几句话了。",
 }
 
 -- 为所有角色添加检查描述语（右键查看时的文字）
