@@ -18,15 +18,28 @@ return
     -- ------------------------------------------------------------------
     -- 战斗胜利后的帝王蟹水面演出。
     --
-    -- 位置推导：
-    --   奶奶岛的陆地块定义在 map/static_layouts/hermitcrab_01.lua，其
-    --   hermitcrab_marker 由 hermitcrab_relocation_manager 放在岛屿几何
-    --   中心（原文注释：Place at island center, achievement marker for
-    --   island center point）。也就是说 marker 一定在陆地正中，不是海面。
+    -- 位置推导（锚点 = 天体后羿战场中心）：
     --
-    --   因此演出点不能直接用 marker，要沿固定方向向外找一个真正的海面点。
-    --   岛屿近似正方形，半边长约 18 格，所以搜索距离上限要明显大于它。
-    --   搜索按固定步长推进、命中即停，保证每次位置一致可预期。
+    --   奶奶岛陆地定义在 map/static_layouts/hermitcrab_01.lua（20x20 格），
+    --   岛上那片「非陆地」的水面就是后期铺设的天体后羿（Wagpunk）战场。
+    --   原版 components/wagpunk_arena_manager.lua 里战场所有摆放物都写成
+    --   「战场原点 + 偏移」，而这个原点是：
+    --
+    --       ARENA_CENTER_X = -3.5 * TILE_SCALE = -14
+    --       ARENA_CENTER_Z = -5.5 * TILE_SCALE = -22
+    --
+    --   它是相对 wagpunk_floor_marker 的偏移；而该 marker 由静态布局摆放，
+    --   与 hermitcrab_marker 同属一个布局坐标系。实测两者的世界坐标差正是
+    --   (-14, -22)（见 wagpunk_arena_manager 里 WALLSPOTS 的 -14 / -22 修正），
+    --   所以：
+    --
+    --       战场中心 = hermitcrab_marker 位置 + (-14, -22)
+    --
+    --   这正是玩家指定的红点位置，也是墙环（WAGPUNK_ARENA_COLLISION_DATA，
+    --   半径 28）的正中。它不是岛屿的几何中心，而是偏左下（西南）的湖心。
+    --
+    --   优先用这个固定点；万一该点不可用（被船占住、地图被改造等），
+    --   才退回「从岛屿中心向外找第一个海面点」的搜索方案。
     -- ------------------------------------------------------------------
     VICTORY_EPILOGUE =
     {
@@ -40,16 +53,39 @@ return
         REAPPEAR_FALLBACK = 4,
         DISAPPEAR_FALLBACK = 4,
 
-        -- 海面搜索：从岛屿中心沿该方向向外推进，找到第一个海面点为止。
+        -- ------------------------------------------------------------------
+        -- 首选：天体后羿战场中心（固定点，不随世界生成变化）
+        --
+        -- 来源：wagpunk_arena_manager.lua 的 ARENA_CENTER_X / ARENA_CENTER_Z
+        --   ARENA_CENTER_X = -3.5 * TILE_SCALE = -3.5 * 4 = -14
+        --   ARENA_CENTER_Z = -5.5 * TILE_SCALE = -5.5 * 4 = -22
+        -- 这是「战场墙环几何中心」，但落点偏贴陆地。
+        --
+        -- 微调：在此基础上往左上各挪一格地皮（TILE_SCALE = 4 单位）：
+        --   x: -14 - 4*1 = -18 ... 再按实机反馈多挪，
+        --   当前最终值见下面两行，改的时候只需改这两个数。
+        -- 注意：victory_epilogue.lua 里 `or` 后面的兜底默认值要同步修改。
+        -- ------------------------------------------------------------------
+        ARENA_OFFSET_X = -24,       -- 相对 hermitcrab_marker 的 x 偏移
+        ARENA_OFFSET_Z = -8,        -- 相对 hermitcrab_marker 的 z 偏移
+
+        -- 固定点不可用时，围绕它做小范围环形搜索的半径（世界单位）。
+        -- 环上取 8 个方向依次试探，避免恰好压在栈桥/船上。
+        ARENA_SEARCH_RADIUS = 6,
+
+        -- ------------------------------------------------------------------
+        -- 兜底：固定点整片区域都不可用时，退回从岛屿中心向外找海面的方案。
         --
         -- 角度约定与原版 brain 一致（见 brains/pollyrogerbrain.lua）：
         --   x = dist * cos(角度)，z = dist * sin(角度)。
         -- 在 DST 世界坐标里 +x 向右、+z 向上（屏幕），因此：
         --   0        = 正右（东）
         --   PI/2     = 正上（北）
-        --   -PI/2    = 正下（南）   <- 默认朝南出海
+        --   -PI/2    = 正下（南）
         --   PI       = 正左（西）
-        OCEAN_SEARCH_ANGLE = -math.pi / 2,
+        -- 战场在岛心西南方向，故兜底方向取 -3/4 * PI（约 -135°，西南）。
+        -- ------------------------------------------------------------------
+        OCEAN_SEARCH_ANGLE = -0.75 * math.pi,
         OCEAN_SEARCH_START = 8,     -- 起始搜索距离（格）
         OCEAN_SEARCH_STEP = 2,      -- 每次推进距离（格）
         OCEAN_SEARCH_MAX = 60,      -- 最大搜索距离（格），超过则放弃演出

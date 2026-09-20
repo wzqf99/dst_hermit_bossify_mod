@@ -128,7 +128,17 @@ Boss 生命值降至 30% 时停止近战，**钻入寄居蟹隐士的房屋**转
 
 **演出位置**
 
-`hermitcrab_marker` 由原版放在岛屿**几何中心**（陆地正中），不是海面，因此不能直接用它当演出点。实际做法是以它为起点，沿固定方向（默认朝南）向外逐段推进，找到第一个满足 `IsOceanAtPoint` 的水面为止。方向、步长、最大距离都能在 `tuning.VICTORY_EPILOGUE` 里调。
+固定在天体后羿（Wagpunk）战场中心的那片海面，也就是奶奶岛太极图案的「非陆地」部分。
+
+推导链：
+
+1. 奶奶岛陆地定义在 `map/static_layouts/hermitcrab_01.lua`（20×20 格）。岛上那片水面就是后期铺设天体战场的湖心。
+2. `wagpunk_arena_manager.lua` 里战场所有摆放物都相对「战场原点」定义，该原点由 `ARENA_CENTER_X = -3.5 * TILE_SCALE`、`ARENA_CENTER_Z = -5.5 * TILE_SCALE` 给出。`WALLSPOTS` 的 `-14 / -22` 修正注释（*Move from center to arena origin*）确认了这两个值正是相对 `hermitcrab_marker` 的。
+3. 以该点为基准做实机位置微调后，最终采用的偏移是 **`(-20, -12)`**（相对 `hermitcrab_marker`），落点更靠湖心、离陆地更远。
+
+因此：**演出点 = `hermitcrab_marker` 位置 + `(-20, -12)`**。这个结果同时被两套独立方法验证过——实机截图按地形标定量测、以及静态布局掩码反推，两者一致。
+
+该点不可用（被船占住等）时，先在它周围 6 单位的环上试 8 个方向；整片都不可用才退回「从岛屿中心向西南搜索第一个海面点」的兜底方案。所有偏移、搜索半径、兜底方向都在 `tuning.VICTORY_EPILOGUE` 里可调（`ARENA_OFFSET_X` / `ARENA_OFFSET_Z`）。
 
 **演出流程**
 
