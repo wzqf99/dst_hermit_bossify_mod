@@ -11,13 +11,22 @@ local KelpSpike =
     PREFABS =
     {
         "hermitcrab_kelp_spike",
+        -- 牢笼专用：出生即带障碍物理（挡角色），见 prefabs/hermitcrab_kelp_spike.lua。
+        "hermitcrab_kelp_spike_wall",
     },
 }
 
 -- 在指定点生成一根海带骨刺。
--- 参数：variation 外观变体（nil 时随机 1~7）；duration 存在时间；delay 冒出延迟。
-function KelpSpike.SpawnSpikeAt(inst, x, z, variation, duration, delay)
-    local spike = SpawnPrefab("hermitcrab_kelp_spike")
+-- 参数：variation 外观变体（nil 时随机 1~7）；duration 存在时间；delay 冒出延迟；
+--       blocking 是否生成带碰撞体积的"牢笼刺"（螺旋 / 房屋不传）。
+function KelpSpike.SpawnSpikeAt(inst, x, z, variation, duration, delay, blocking)
+    local spike = SpawnPrefab(
+        blocking and "hermitcrab_kelp_spike_wall" or "hermitcrab_kelp_spike"
+    )
+    -- 兜底：牢笼刺 prefab 未注册时退回纯视觉刺，至少保证技能有表现。
+    if spike == nil and blocking then
+        spike = SpawnPrefab("hermitcrab_kelp_spike")
+    end
     if spike == nil then
         return nil
     end
@@ -25,7 +34,12 @@ function KelpSpike.SpawnSpikeAt(inst, x, z, variation, duration, delay)
     spike.Transform:SetPosition(x, 0, z)
     spike:SetAttacker(inst)
 
-    -- 传入接触伤害参数（由 Boss 造成）。
+    -- 牢笼刺按调参设置碰撞半径（能否从缝隙挤出取决于它与圈半径的比例）。
+    if blocking and spike.Physics ~= nil and tuning.SPIKE_COLLISION_RADIUS ~= nil then
+        spike.Physics:SetCapsule(tuning.SPIKE_COLLISION_RADIUS, 2)
+    end
+
+    -- 传入伤害参数（一次性结算，由 Boss 造成）。
     spike.contact_damage = tuning.SPIKE_DAMAGE
     spike.contact_radius = tuning.SPIKE_CONTACT_RADIUS
     spike.contact_cooldown = tuning.SPIKE_CONTACT_COOLDOWN

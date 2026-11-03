@@ -3,8 +3,12 @@
 -- 用海带植株竖着长的形态，模拟远古织影者的"地面骨刺"：
 --   出现（grow 生长动画）→ 竖立存在（idle 循环）→ 枯萎缩回（picked 动画）
 --
--- 伤害：海带竖立期间周期性接触伤害，由施法者（Boss）造成，
---       保证仇恨与击杀归属正确（与 shell_ring 的接触伤害模式一致）。
+-- 伤害：定格瞬间对范围内玩家结算一次（一次性），由施法者（Boss）造成，
+--       保证仇恨与击杀归属正确。同一玩家在 SPIKE_HIT_COOLDOWN 内最多被命中一次，
+--       避免牢笼一圈刺同时定格时叠出多倍伤害。
+--
+-- 碰撞：定格后可开启物理碰撞体积（blocking），把玩家真正围在牢笼里；
+--       未开启的刺（螺旋 / 房屋）只有视觉，不阻挡任何角色。
 --
 -- 依赖：
 --   - bullkelp.zip（海带植株动画，含 idle / grow / picking / picked）
@@ -31,7 +35,7 @@ local DEFAULT_CONTACT_COOLDOWN = 1
 local DEFAULT_GROW_SPEED = 1
 local DEFAULT_GROW_FREEZE_PROGRESS = 0.3
 local FREEZE_MULTIPLIER = 0.0001
-local CONTACT_CHECK_PERIOD = 0.2
+local DEFAULT_COLLISION_RADIUS = 0.35
 
 --------------------------------------------------------------------------
 -- 抛飞掉落物（复用原版骨刺的"顶飞物品"效果）
@@ -119,9 +123,20 @@ local function DoClear(inst)
 end
 
 --------------------------------------------------------------------------
--- 接触伤害：海带竖立期间周期性检测周围玩家，由 Boss 造成伤害并击退。
+-- 一次性伤害：只在"定格瞬间"结算一次，不再周期性检测。
+-- 同一玩家在 contact_cooldown 内最多被一次海带刺命中：牢笼一圈 6 根刺
+-- 几乎同时定格，若各自独立结算会叠出 6 倍伤害，所以冷却表挂在世界层面、
+-- 由所有海带刺共享（弱键，实体移除后自动失效）。
 --------------------------------------------------------------------------
-local function TryContactHit(inst)
+local function GetHitCooldowns()
+    local world = TheWorld
+    if world._kelp_spike_hit_cooldowns == nil then
+        world._kelp_spike_hit_cooldowns = setmetatable({}, { __mode = "k" })
+    end
+    return world._kelp_spike_hit_cooldowns
+end
+
+local function DealSpikeDamage(inst)
     local attacker = inst.attacker
     if attacker == nil
         or not attacker:IsValid()
@@ -133,7 +148,7 @@ local function TryContactHit(inst)
     local x, _, z = inst.Transform:GetWorldPosition()
     local radius = inst.contact_radius or DEFAULT_CONTACT_RADIUS
     local now = GetTime()
-    inst._contact_hits = inst._contact_hits or {}
+    local cooldowns = GetHitCooldowns()
 
     for _, target in ipairs(TheSim:FindEntities(
         x, 0, z, radius + 1,
@@ -143,28 +158,31 @@ local function TryContactHit(inst)
             and target ~= attacker
             and target.components.combat ~= nil
             and target.components.health ~= nil
-            and not target.components.health:IsDead() then
+            and not target.components.health:IsDead()
+            and (cooldowns[target] or 0) <= now then
 
             local tr = target:GetPhysicsRadius(0)
             local tx, _, tz = target.Transform:GetWorldPosition()
             local dx = tx - x
             local dz = tz - z
             local r = radius + tr
-            if dx * dx + dz * dz <= r * r
-                and (inst._contact_hits[target] or 0) <= now then
-
+            if dx * dx + dz * dz <= r * r then
                 if target.components.combat:GetAttacked(
                     attacker,
                     inst.contact_damage or DEFAULT_DAMAGE,
                     inst
                 ) then
-                    inst._contact_hits[target] = now + (inst.contact_cooldown or DEFAULT_CONTACT_COOLDOWN)
-                    target:PushEvent("knockback", {
-                        knocker = inst,
-                        radius = r,
-                        strengthmult = 0.35,
-                        forcelanded = true,
-                    })
+                    cooldowns[target] = now + (inst.contact_cooldown or DEFAULT_CONTACT_COOLDOWN)
+                    -- 有碰撞体积的刺（牢笼）不击退：玩家已被围住，击退只会
+                    -- 把人顶在刺上反复挤压。纯视觉的刺保留原版顶飞手感。
+                    if not inst.blocking then
+                        target:PushEvent("knockback", {
+                            knocker = inst,
+                            radius = r,
+                            strengthmult = 0.35,
+                            forcelanded = true,
+                        })
+                    end
                 end
             end
         end
@@ -195,9 +213,9 @@ local function KillSpike(inst)
         inst.freezetask = nil
     end
 
-    if inst.contacttask ~= nil then
-        inst.contacttask:Cancel()
-        inst.contacttask = nil
+    -- 立即取消碰撞体积，让枯萎缩回阶段不再阻挡玩家（纯视觉刺没有物理体）。
+    if inst.Physics ~= nil then
+        inst.Physics:SetActive(false)
     end
 
     -- 恢复原速，让枯萎动画正常播放，随后消失。
@@ -215,7 +233,7 @@ local function KillSpike(inst)
 end
 
 -- grow 播放到指定进度时触发：冻结定格在"叶子长到最高"的骨刺姿态，
--- 并从这一刻起才开始造成接触伤害。
+-- 并从这一刻起结算唯一的一次伤害。
 local function FreezeSpike(inst)
     inst.freezetask = nil
     if inst.killed or not inst:IsValid() then
@@ -227,11 +245,10 @@ local function FreezeSpike(inst)
     inst.SoundEmitter:PlaySound("turnoftides/common/together/water/harvest_plant")
     DoClear(inst)
 
-    -- 伤害从定格这一刻才开始：叶子长到最高、姿态固定后才造成接触伤害。
-    TryContactHit(inst)
-    inst.contacttask = inst:DoPeriodicTask(CONTACT_CHECK_PERIOD, TryContactHit)
+    -- 一次性伤害：定格瞬间结算一次，之后不再持续掉血。
+    DealSpikeDamage(inst)
 
-    -- 存活时间从定格开始算（定格阶段共 duration 秒），期间持续造成伤害。
+    -- 存活时间从定格开始算（定格阶段共 duration 秒），期间不再造成伤害。
     inst.killtask = inst:DoTaskInTime(inst.duration or DEFAULT_DURATION, KillSpike)
 end
 
@@ -268,55 +285,71 @@ local function RestartSpike(inst, delay, duration, variation)
     end
 end
 
-local function fn()
-    local inst = CreateEntity()
+-- 两个 prefab 共用同一套逻辑：
+--   fn              纯视觉刺（螺旋 / 房屋）：完全没有物理体，保持原行为。
+--   fn_wall         牢笼刺：出生即带障碍物理（参考原版 alterguardian_phase2spike 的骨刺墙）。
+-- 拆成两个 prefab 是为了让"加物理"这件事完全不参与普通刺的创建流程。
+local function MakeFn(with_physics)
+    return function()
+        local inst = CreateEntity()
 
-    inst.entity:AddTransform()
-    inst.entity:AddAnimState()
-    inst.entity:AddDynamicShadow()
-    inst.entity:AddSoundEmitter()
-    inst.entity:AddNetwork()
+        inst.entity:AddTransform()
+        inst.entity:AddAnimState()
+        inst.entity:AddDynamicShadow()
+        inst.entity:AddSoundEmitter()
+        inst.entity:AddNetwork()
 
-    inst.AnimState:SetBank("bullkelp")
-    inst.AnimState:SetBuild("bullkelp")
-    -- 初始为"被采摘"的空状态，等 RestartSpike 的延迟结束后再播 grow 冒出。
-    inst.AnimState:PlayAnimation("picked")
-    inst.AnimState:SetFinalOffset(1)
+        if with_physics then
+            -- 与原版骨刺墙一致：mass 0 静态障碍，挡角色 / 物品 / 巨兽，
+            -- 实体睡眠时也保留物理体（否则远处的牢笼会失效）。
+            MakeObstaclePhysics(inst, DEFAULT_COLLISION_RADIUS)
+            inst.Physics:SetDontRemoveOnSleep(true)
+        end
 
-    inst.DynamicShadow:SetSize(1.2, 0.75)
+        inst.AnimState:SetBank("bullkelp")
+        inst.AnimState:SetBuild("bullkelp")
+        -- 初始为"被采摘"的空状态，等 RestartSpike 的延迟结束后再播 grow 冒出。
+        inst.AnimState:PlayAnimation("picked")
+        inst.AnimState:SetFinalOffset(1)
 
-    inst:AddTag("notarget")
-    inst:AddTag("fossilspike")
-    inst:AddTag("NOCLICK")
+        inst.DynamicShadow:SetSize(1.2, 0.75)
 
-    inst.entity:SetPristine()
+        inst:AddTag("notarget")
+        inst:AddTag("fossilspike")
+        inst:AddTag("NOCLICK")
 
-    if not TheWorld.ismastersim then
+        inst.entity:SetPristine()
+
+        if not TheWorld.ismastersim then
+            return inst
+        end
+
+        inst.persists = false
+        inst.attacker = nil
+        inst.duration = DEFAULT_DURATION
+        inst.contact_damage = DEFAULT_DAMAGE
+        inst.contact_radius = DEFAULT_CONTACT_RADIUS
+        inst.contact_cooldown = DEFAULT_CONTACT_COOLDOWN
+        inst.grow_speed = DEFAULT_GROW_SPEED
+        inst.grow_freeze_progress = DEFAULT_GROW_FREEZE_PROGRESS
+        inst.blocking = with_physics
+        inst.collision_radius = DEFAULT_COLLISION_RADIUS
+
+        -- 随机朝向，避免海带刺方向一致。
+        inst.Transform:SetRotation(math.random() * 360)
+
+        inst.task = inst:DoTaskInTime(0, StartSpike)
+        inst.RestartSpike = RestartSpike
+        inst.KillSpike = KillSpike
+
+        -- 由技能模块在生成时设置施法者（Boss），用于伤害归属与排除自身。
+        inst.SetAttacker = function(self, attacker)
+            self.attacker = attacker
+        end
+
         return inst
     end
-
-    inst.persists = false
-    inst.attacker = nil
-    inst.duration = DEFAULT_DURATION
-    inst.contact_damage = DEFAULT_DAMAGE
-    inst.contact_radius = DEFAULT_CONTACT_RADIUS
-    inst.contact_cooldown = DEFAULT_CONTACT_COOLDOWN
-    inst.grow_speed = DEFAULT_GROW_SPEED
-    inst.grow_freeze_progress = DEFAULT_GROW_FREEZE_PROGRESS
-
-    -- 随机朝向，避免海带刺方向一致。
-    inst.Transform:SetRotation(math.random() * 360)
-
-    inst.task = inst:DoTaskInTime(0, StartSpike)
-    inst.RestartSpike = RestartSpike
-    inst.KillSpike = KillSpike
-
-    -- 由技能模块在生成时设置施法者（Boss），用于伤害归属与排除自身。
-    inst.SetAttacker = function(self, attacker)
-        self.attacker = attacker
-    end
-
-    return inst
 end
 
-return Prefab("hermitcrab_kelp_spike", fn, assets, prefabs)
+return Prefab("hermitcrab_kelp_spike", MakeFn(false), assets, prefabs),
+    Prefab("hermitcrab_kelp_spike_wall", MakeFn(true), assets, prefabs)

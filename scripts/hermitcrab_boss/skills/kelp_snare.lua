@@ -72,7 +72,8 @@ local function SpawnSnareRing(inst, target)
             local delay = delay_toggle == 0 and 0 or (0.2 + delay_toggle * math.random() * 0.2)
             delay_toggle = delay_toggle == 1 and -1 or 1
 
-            kelp_spike.SpawnSpikeAt(inst, x1, z1, variation, nil, delay)
+            -- 最后一项 true：牢笼刺开启碰撞体积，把玩家真正围在原地。
+            kelp_spike.SpawnSpikeAt(inst, x1, z1, variation, nil, delay, true)
         end
     end
 end
